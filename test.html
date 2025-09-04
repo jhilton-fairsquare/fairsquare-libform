@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Lead Form Sandbox</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; padding: 24px; }
+    form { display: grid; gap: 12px; max-width: 420px; }
+    .field-error { color: #b00020; font-size: 12px; margin-top: 4px; }
+    .is-invalid { border-color: #b00020; outline-color: #b00020; }
+  </style>
+</head>
+<body>
+  <form data-form="sandbox" novalidate>
+    <input name="businessName" placeholder="Business name" />
+    <input name="firstName" placeholder="First name" />
+    <input name="lastName" placeholder="Last name" />
+    <input name="email" type="email" placeholder="Email" />
+    <input name="phoneNumber" placeholder="Phone Number (123-456-7890)" />
+    <input name="businessZipcode" placeholder="Business Zipcode" />
+    <label><input name="termsAgree" type="checkbox" value="on" /> Accept privacy policy</label>
+    <button type="submit">Apply Now</button>
+  </form>
+
+  <script type="module">
+    import { createForm } from './lib/FormFactory.js';
+    import { required, email, mustAccept, phoneDashedUS, all } from './lib/form-core/validators/index.js';
+    import { clientIdPlugin } from "./lib/form-core/plugins/clientId.js";
+
+    const getInput = (formId, name) => () => {
+      const sel = `[data-form="${formId}"] [name="${name}"]`;
+      const el = document.querySelector(sel);
+      if (!el) return '';
+      if (el.type === 'checkbox') return el.checked ? 'on' : '';
+      return (el.value ?? '').toString();
+    };
+
+    const form = createForm({
+      id: 'sandbox',
+      endpoint: 'https://webhook.site/ad36f33f-9e4d-42ad-964d-870718347039',
+      fields: {
+        email: { get: getInput('sandbox', 'email'), validate: all(required(), email()) },
+        businessName: { get: getInput('sandbox', 'businessName'), validate: all(required()) },
+        firstName: { get: getInput('sandbox', 'firstName'), validate: all(required('First name is required')) },
+        lastName: { get: getInput('sandbox', 'lastName'), validate: all(required('Last name is required')) },
+        phoneNumber: { get: getInput('sandbox', 'phoneNumber'), validate: all(required(), phoneDashedUS()) },
+        businessZipcode: { get: getInput('sandbox', 'businessZipcode'), validate: all(required() ) },
+        termsAgree: { get: getInput('sandbox', 'termsAgree'), validate: all(mustAccept() ) },
+      },
+       plugins: [
+        clientIdPlugin({
+          cookieName: "nfid",
+          persistDays: 365,
+          sameSite: "Lax",
+          secure: location.protocol === "https:",
+          // canSetCookie: () => window.userConsented === true,
+        }),
+      ],
+      onSubmit(values) { return { source: 'sandbox', ...values }; },
+      onSuccess() { alert('Thanks!'); },
+    });
+  </script>
+</body>
+</html>
