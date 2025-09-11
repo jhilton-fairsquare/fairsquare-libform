@@ -40,47 +40,7 @@ A small, reusable JavaScript library for powering **FairSquare** landing-page fo
 * Prevent-double-submit + loading state helpers
 * Pluggable analytics callbacks ("submitted", "validated", "error")
 
-> *Note:* The repository includes a `test.html` demo page for quick manual testing.
-
----
-
-## Quick start
-
-### 1) Via script tag (UMD)
-
-Add the library to any page and initialize it when the DOM is ready.
-
-```html
-<!-- CSS (optional styles for messages/states) -->
-<link rel="stylesheet" href="/lib/libform.css" />
-
-<!-- JS library -->
-<script src="/lib/libform.min.js" defer></script>
-<script>
-  window.addEventListener('DOMContentLoaded', () => {
-    // Attach to all forms with data-libform
-    LibForm.mount('[data-libform]', {
-      endpoint: '/api/lead',
-    });
-  });
-</script>
-```
-
-### 2) Via ES module (bundlers)
-
-```js
-import { mount, createLibForm } from './lib/index.js';
-
-mount('[data-libform]', {
-  endpoint: '/api/lead',
-});
-
-// or
-const form = createLibForm('#lead-form', { endpoint: '/api/lead' });
-form.on('submitted', (payload) => {
-  console.log('Lead submitted', payload);
-});
-```
+> *Note:* The repository includes a `example.html` demo page for quick manual testing.
 
 ---
 
