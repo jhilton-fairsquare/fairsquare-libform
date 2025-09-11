@@ -9,10 +9,7 @@ A small, reusable JavaScript library for powering **FairSquare** landing-page fo
 ## Table of contents
 
 * [Features](#features)
-* [Quick start](#quick-start)
 
-  * [1) Via script tag (UMD)](#1-via-script-tag-umd)
-  * [2) Via ES module (bundlers)](#2-via-es-module-bundlers)
 * [Usage](#usage)
 
   * [HTML markup](#html-markup)
