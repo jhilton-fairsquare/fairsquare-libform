@@ -444,8 +444,11 @@ var FairsquareForm = (() => {
       })
     };
     const mounted = mount(
-      `[data-form="${id}"]`,
-      () => {
+      `[data-form="${id}"], [id="${id}"]`,
+      (formEl) => {
+        if (formEl.getAttribute("data-form") !== id) {
+          formEl.setAttribute("data-form", id);
+        }
         controller = new FormController({
           id,
           fields,

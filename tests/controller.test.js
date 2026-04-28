@@ -37,6 +37,25 @@ beforeEach(() => {
 });
 
 describe("FormController via createForm", () => {
+  it("mounts a form identified only by id (no data-form attribute)", async () => {
+    document.body.innerHTML = `
+      <form id="t1" novalidate>
+        <input name="email" />
+        <button type="submit">Go</button>
+      </form>
+    `;
+    const t = fakeTransport();
+    const handle = createForm({
+      id: "t1",
+      transport: t,
+      fields: { email: { get: getInput("email"), validate: all() } },
+    });
+    const ctrl = await handle.ready;
+    expect(ctrl).toBeDefined();
+    // The lib should have stamped data-form so downstream selectors work
+    expect(document.querySelector("#t1").getAttribute("data-form")).toBe("t1");
+  });
+
   it("ready resolves after the form mounts", async () => {
     setupForm();
     const t = fakeTransport();
