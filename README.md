@@ -565,8 +565,9 @@ The build pipeline is intentionally not in the test suite — tests run against 
 
 ## Open questions / known gaps
 
-- **Is `formType: "Framer"` a real assigned formType?** Prod sends it. The implementation guide says `formType` is "assigned during onboarding, case-sensitive." If the partner endpoint registry doesn't have `"Framer"`, a future migration to `/api/partners/submit` will 400 until the partner team issues a real value. Worth confirming.
 - **Is form 2 missing `journey` intentional?** Prod's standalone form sends `journey: "NFCoreApply"`; the footer form omits it. Either the gateway defaults it server-side or this is a config drift nobody noticed. Worth confirming.
 - **Tier codes (`Tier 1a`/`Tier 2b`/etc.) are not in the documented field reference.** The gateway accepts them today (unknown fields are ignored per the spec) but they're effectively dead weight. Could be removed once we confirm nothing downstream consumes them.
 - **No CI yet.** The recommended setup: GitHub Actions running `npm test` + `npm run build` + `git diff --exit-code dist/` on every PR.
 - **No README for plugin authors with TypeScript types.** JSDoc `@typedef`s for `FieldConfig | Validator | Plugin | Transport | Context` would give consuming codebases IDE support without a TS migration. Tracked as Phase 3 work.
+
+> **Note:** `"Framer"` is a real registered `formType`/journey, not a placeholder. Treat it as a first-class value alongside `NFCoreApply`, `XPRSApply`, etc.
