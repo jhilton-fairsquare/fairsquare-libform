@@ -8,6 +8,10 @@
     form { display: grid; gap: 12px; max-width: 420px; }
     .field-error { color: #b00020; font-size: 12px; margin-top: 4px; }
     .is-invalid { border-color: #b00020; outline-color: #b00020; }
+    button[type="submit"] {
+      background: #111; color: white; border: none; padding: 10px 14px;
+      border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center;
+    }
   </style>
 </head>
 <body>
@@ -16,49 +20,62 @@
     <input name="firstName" placeholder="First name" />
     <input name="lastName" placeholder="Last name" />
     <input name="email" type="email" placeholder="Email" />
-    <input name="phoneNumber" placeholder="Phone Number (123-456-7890)" />
-    <input name="businessZipcode" placeholder="Business Zipcode" />
+    <input name="phoneNumber" placeholder="Phone (123-456-7890)" />
+    <input name="businessZipcode" placeholder="ZIP" />
     <label><input name="termsAgree" type="checkbox" value="on" /> Accept privacy policy</label>
     <button type="submit">Apply Now</button>
   </form>
 
   <script type="module">
     import { createForm } from './lib/FormFactory.js';
-    import { required, email, mustAccept, phoneDashedUS, all } from './lib/form-core/validators/index.js';
-    import { clientIdPlugin } from "./lib/form-core/plugins/clientId.js";
+    import {
+      required, all,
+      emailStrict, phoneUS, zipUS,
+      lettersHyphenSpaces, mustAccept,
+    } from './lib/form-core/validators/index.js';
+    import { formatPhoneUS, formatZipUS } from './lib/form-core/formatters/index.js';
+    import { attributionPlugin } from './lib/form-core/plugins/attribution.js';
+    import { submitButtonPlugin } from './lib/form-core/plugins/submitButton.js';
 
     const getInput = (formId, name) => () => {
-      const sel = `[data-form="${formId}"] [name="${name}"]`;
-      const el = document.querySelector(sel);
+      const el = document.querySelector(`[data-form="${formId}"] [name="${name}"]`);
       if (!el) return '';
       if (el.type === 'checkbox') return el.checked ? 'on' : '';
       return (el.value ?? '').toString();
     };
 
-    const form = createForm({
+    const handle = createForm({
       id: 'sandbox',
       endpoint: 'https://webhook.site/ad36f33f-9e4d-42ad-964d-870718347039',
+      debug: true,
       fields: {
-        email: { get: getInput('sandbox', 'email'), validate: all(required(), email()) },
-        businessName: { get: getInput('sandbox', 'businessName'), validate: all(required()) },
-        firstName: { get: getInput('sandbox', 'firstName'), validate: all(required('First name is required')) },
-        lastName: { get: getInput('sandbox', 'lastName'), validate: all(required('Last name is required')) },
-        phoneNumber: { get: getInput('sandbox', 'phoneNumber'), validate: all(required(), phoneDashedUS()) },
-        businessZipcode: { get: getInput('sandbox', 'businessZipcode'), validate: all(required() ) },
-        termsAgree: { get: getInput('sandbox', 'termsAgree'), validate: all(mustAccept() ) },
+        email:           { get: getInput('sandbox', 'email'),           validate: all(required(), emailStrict()) },
+        businessName:    { get: getInput('sandbox', 'businessName'),    validate: all(required(), lettersHyphenSpaces('Please enter your business name.')) },
+        firstName:       { get: getInput('sandbox', 'firstName'),       validate: all(required('First name is required'), lettersHyphenSpaces()) },
+        lastName:        { get: getInput('sandbox', 'lastName'),        validate: all(required('Last name is required'),  lettersHyphenSpaces()) },
+        phoneNumber:     { get: getInput('sandbox', 'phoneNumber'),     validate: all(required(), phoneUS()), format: formatPhoneUS },
+        businessZipcode: { get: getInput('sandbox', 'businessZipcode'), validate: all(required(), zipUS()),   format: formatZipUS },
+        termsAgree:      { get: getInput('sandbox', 'termsAgree'),      validate: all(mustAccept()) },
       },
-       plugins: [
-        clientIdPlugin({
-          cookieName: "nfid",
-          persistDays: 365,
-          sameSite: "Lax",
-          secure: location.protocol === "https:",
-          // canSetCookie: () => window.userConsented === true,
+      plugins: [
+        attributionPlugin({
+          clientId: {
+            cookieName: 'nfid',
+            persistDays: 365,
+            sameSite: 'Lax',
+            secure: location.protocol === 'https:',
+          },
         }),
+        submitButtonPlugin(),
       ],
       onSubmit(values) { return { source: 'sandbox', ...values }; },
       onSuccess() { alert('Thanks!'); },
+      onError(err) { console.warn('submit failed', err); },
     });
+
+    handle.ready
+      .then(() => console.log('[sandbox] form ready'))
+      .catch((err) => console.error('[sandbox] mount failed', err));
   </script>
 </body>
 </html>
