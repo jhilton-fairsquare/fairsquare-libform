@@ -47,6 +47,7 @@
     import { tierMapPlugin } from './lib/form-core/plugins/tierMap.js';
     import { redirectOnUrlPlugin } from './lib/form-core/plugins/redirectOnUrl.js';
     import { serverValidationPlugin } from './lib/form-core/plugins/serverValidation.js';
+    import { dataLayerPlugin } from './lib/form-core/plugins/dataLayer.js';
 
     const getInput = (formId, name) => () => {
       const el = document.querySelector(`[data-form="${formId}"] [name="${name}"]`);
@@ -71,9 +72,12 @@
         consent:               { get: getInput('sandbox', 'consent'),               validate: all(mustAccept()) },
       },
       plugins: [
-        // Order matters: attribution + queryParams + tierMap each wrap onSubmit
-        // and are composed in declaration order. redirect/server-validation hook
-        // post-response and run after consumer onSuccess/onError.
+        // Order matters in two phases:
+        //   1) Pre-send (attribution → queryParams → tierMap) compose onSubmit
+        //      via wrapping in declaration order.
+        //   2) Post-response — submitButton, serverValidation, dataLayer, then
+        //      redirect — are awaited in declaration order. dataLayer must come
+        //      BEFORE redirect so the GA hit gets a tick to fire.
         attributionPlugin({
           clientId: {
             cookieName: 'nfid',
@@ -85,8 +89,21 @@
         queryParamsPlugin(),
         tierMapPlugin(),
         submitButtonPlugin(),
-        serverValidationPlugin({
-          // Map any divergent API → form field names here (e.g. zipCode → zipCode is fine).
+        serverValidationPlugin(),
+        dataLayerPlugin({
+          form_type: 'large_stand_alone_apply_now',
+          // Auto picks gtag eventCallback when window.gtag exists, otherwise
+          // microtask drain. 300ms is the upper bound, real delay is typically
+          // far less — and only paid on success.
+          reliability: 'auto',
+          reliabilityTimeoutMs: 300,
+          params: {
+            event_tier: { source: 'form',     name: 'salesDistributionTier' },
+            tierDetail: { source: 'form',     name: 'salesDistributionTier', as: 'label' },
+            zip_code:   { source: 'form',     name: 'zipCode', default: '' },
+            event_card: { source: 'response', path: 'event_card', default: 'no card submitted' },
+            state:      { source: 'response', path: 'state', default: '' },
+          },
         }),
         redirectOnUrlPlugin(),
       ],
