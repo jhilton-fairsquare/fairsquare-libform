@@ -1,0 +1,17 @@
+{
+  "name": "@fairsquare/libform",
+  "version": "0.1.0",
+  "description": "Lightweight, extensible form handler library used by National Funding lead-capture pages.",
+  "type": "module",
+  "private": true,
+  "main": "lib/FormFactory.js",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.1",
+    "vitest": "^2.1.4"
+  }
+}
