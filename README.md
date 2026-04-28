@@ -46,85 +46,126 @@ import { createForm, validators, plugins } from "@fairsquare/libform/dist/fairsq
 
 ---
 
-## Quick start
+## Quick start — Framer drop-in
+
+For Fairsquare's standard Framer landing pages, use the `framer` preset. It knows the prod conventions: class-based field selectors (`.FullName`, `.Email`, `.Phone`, …), strict validators, all 9 plugins in the right order, the `_nfIdSF` cookie, the eTLD+1 cookie domain, and the endpoint switch by hostname.
 
 ```html
-<form data-form="apply" novalidate>
-  <input name="fullName" />
-  <input name="email" type="email" />
-  <input name="phone" />
-  <select name="salesDistributionTier">
-    <option value="">Annual revenue…</option>
-    <option value="Tier 1a">Under $120K</option>
-    <option value="Tier 1b">$120K&ndash;$249K</option>
-    <option value="Tier 2a">$250K&ndash;$499K</option>
-    <option value="Tier 2b">$500K&ndash;$999K</option>
-    <option value="Tier 3">Over $1M</option>
-  </select>
-  <label><input name="consent" type="checkbox" value="on" /> Accept privacy policy</label>
-  <button type="submit">Apply Now</button>
-</form>
-
+<script src="https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.1.0/dist/fairsquare-form.iife.min.js"></script>
 <script>
-  const { createForm, validators, formatters, plugins } = FairsquareForm;
-  const { all, required, emailStrict, phoneUS, fullNameLettersOnly, mustAccept, requiredSelect } = validators;
-  const { formatPhoneUS, stripDashes } = formatters;
+  FairsquareForm.presets.framer({
+    id: "framer-form-1",
+    formType: "Framer",
+    journey: "NFCoreApply",
+    gaFormType: "large_stand_alone_apply_now",
+  });
 
-  const get = (name) => () => {
-    const el = document.querySelector(`[data-form="apply"] [name="${name}"]`);
-    if (!el) return "";
-    if (el.type === "checkbox") return el.checked ? "on" : "";
-    return el.value || "";
-  };
-
-  createForm({
-    id: "apply",
-    endpoint: "https://www.nationalfunding.com/api/forms/submit",
-    fields: {
-      fullName:              { get: get("fullName"),              validate: all(required(), fullNameLettersOnly()) },
-      email:                 { get: get("email"),                 validate: all(required(), emailStrict()) },
-      phone:                 { get: get("phone"),                 validate: all(required(), phoneUS()), format: formatPhoneUS },
-      salesDistributionTier: { get: get("salesDistributionTier"), validate: all(requiredSelect()) },
-      consent:               { get: get("consent"),               validate: all(mustAccept()) },
-    },
-    plugins: [
-      plugins.attribution(),                  // NFID + _ga + landingPage + path + referrer + clientBrowser
-      plugins.queryParams(),                  // utmSource/Medium/Campaign/…, gclid, gclsrc, fbclid, msclkid
-      plugins.tierMap(),                      // tier code → annualRevenueRange enum
-      plugins.staticFields({                  // routing-critical statics
-        source: "NF",
-        formType: "your-formType",            // assigned by partner team — case-sensitive
-        journey: "NFCoreApply",
-        responseChannel: "Internet",
-      }),
-      plugins.fbclidResync(),                 // _fbp resync into landingPage
-      plugins.submitButton(),                 // spinner + aria-busy
-      plugins.serverValidation(),             // surface 400 fields[] on form
-      plugins.dataLayer({                     // GA event with reliable delivery
-        form_type: "large_stand_alone_apply_now",
-        params: {
-          event_tier: { source: "form",     name: "salesDistributionTier" },
-          tierDetail: { source: "form",     name: "salesDistributionTier", as: "label" },
-          zip_code:   { source: "form",     name: "zipCode", default: "" },
-          event_card: { source: "response", path: "event_card", default: "no card submitted" },
-          state:      { source: "response", path: "state", default: "" },
-        },
-      }),
-      plugins.redirectOnUrl(),                // 200 res.url + 4xx/5xx fallback url
-    ],
-    onSubmit(values) {
-      return {
-        fullName: values.fullName,
-        email: values.email,
-        phone: stripDashes(values.phone),
-        consent: values.consent === "on",
-      };
-    },
+  FairsquareForm.presets.framer({
+    id: "framer-form-2",
+    formType: "Framer",
+    journey: "NFCoreApply",
+    gaFormType: "large_footer_form_apply_now",
   });
 </script>
 ```
 
-Working examples live at [`example.html`](./example.html) (ESM) and [`example-iife.html`](./example-iife.html) (drop-in).
+That's the full configuration for two prod-parity forms. The preset handles attribution, query-param capture, tier mapping, fbclid resync, dataLayer events, server-validation surfacing, and the redirect contract — all wired in the correct order.
+
+### Customizing the preset
+
+Two override knobs handle the common cases:
+
+```js
+const V = FairsquareForm.validators;
+
+FairsquareForm.presets.framer({
+  id: "framer-form-2",
+  formType: "Framer",
+  journey: "NFCoreApply",
+  gaFormType: "large_footer_form_apply_now",
+
+  // Field names that should not require a non-empty value. Validators still
+  // run if the user fills the field — we just stop requiring it.
+  optional: ["businessName", "zipCode"],
+
+  // Replace a field's validator chain entirely.
+  validators: {
+    businessName: V.all(V.required(), V.minLength(2), V.maxLength(100)),
+    email: V.all(V.required(), V.emailStrict(), V.pattern(/@partner\.com$/, "Must use a partner email")),
+  },
+});
+```
+
+**Other preset options:** `endpoint`, `source`, `responseChannel`, `cookieName`, `cookieDomain`, `fieldClasses` (override class selectors), `dataLayerParams` (extend GA params), `onSubmit` (replace payload mapping), `onSuccess`, `onError`, `navigate` (replace `window.location.href` for SPA routing).
+
+### Default field set
+
+The preset auto-detects which of these are present on the page (checks for the class wrapper) and only validates the ones that exist:
+
+| Class wrapper | Field name | Default validator |
+|---|---|---|
+| `.FullName` | `fullName` | `required` + `fullNameLettersOnly` |
+| `.FirstName` / `.LastName` | `firstName` / `lastName` | `required` + `lettersHyphenSpaces` |
+| `.BusinessName` | `businessName` | `required` + `lettersHyphenSpaces` |
+| `.Email` | `email` | `required` + `emailStrict` |
+| `.Phone` | `phone` | `required` + `phoneUS` (live-formatted) |
+| `.ZipCode` | `zipCode` | `required` + `zipUS` (live-formatted) |
+| `.SalesDistributionTier` | `salesDistributionTier` | `requiredSelect` |
+| `.PrivacyPolicyAccepted` | `consent` | `mustAccept` |
+
+The preset uses the `FullName` wrapper if present; otherwise it falls back to `FirstName` + `LastName` (matching prod's behavior).
+
+### When to skip the preset
+
+The preset is for the common Fairsquare/National-Funding pattern. If you need fields it doesn't know about (custom partner code, multi-step flow, hidden flags), use `createForm` directly — see the [low-level API](#low-level-api-createform) below. The preset and `createForm` are complementary; the preset *is* a `createForm` call with sensible defaults.
+
+Working examples: [`example-iife.html`](./example-iife.html) (drop-in), [`example.html`](./example.html) (ESM).
+
+---
+
+## Low-level API: `createForm`
+
+The preset is built on top of `createForm`. Use it directly when you need full control:
+
+```js
+const { createForm, validators, formatters, plugins } = FairsquareForm;
+const { all, required, emailStrict, phoneUS, fullNameLettersOnly, mustAccept, requiredSelect } = validators;
+const { formatPhoneUS, stripDashes } = formatters;
+
+const get = (name) => () => {
+  const el = document.querySelector(`[data-form="apply"] [name="${name}"]`);
+  if (!el) return "";
+  if (el.type === "checkbox") return el.checked ? "on" : "";
+  return el.value || "";
+};
+
+createForm({
+  id: "apply",
+  endpoint: "https://www.nationalfunding.com/api/forms/submit",
+  fields: {
+    fullName: { get: get("fullName"), validate: all(required(), fullNameLettersOnly()) },
+    email:    { get: get("email"),    validate: all(required(), emailStrict()) },
+    phone:    { get: get("phone"),    validate: all(required(), phoneUS()), format: formatPhoneUS },
+    consent:  { get: get("consent"),  validate: all(mustAccept()) },
+  },
+  plugins: [
+    plugins.attribution(),
+    plugins.queryParams(),
+    plugins.staticFields({ source: "NF", formType: "your-formType", journey: "NFCoreApply", responseChannel: "Internet" }),
+    plugins.submitButton(),
+    plugins.serverValidation(),
+    plugins.redirectOnUrl(),
+  ],
+  onSubmit(values) {
+    return {
+      fullName: values.fullName,
+      email: values.email,
+      phone: stripDashes(values.phone),
+      consent: values.consent === "on",
+    };
+  },
+});
+```
 
 ---
 
