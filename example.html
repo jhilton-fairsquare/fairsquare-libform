@@ -48,6 +48,7 @@
     import { redirectOnUrlPlugin } from './lib/form-core/plugins/redirectOnUrl.js';
     import { serverValidationPlugin } from './lib/form-core/plugins/serverValidation.js';
     import { dataLayerPlugin } from './lib/form-core/plugins/dataLayer.js';
+    import { fbclidResyncPlugin } from './lib/form-core/plugins/fbclidResync.js';
 
     const getInput = (formId, name) => () => {
       const el = document.querySelector(`[data-form="${formId}"] [name="${name}"]`);
@@ -88,6 +89,11 @@
         }),
         queryParamsPlugin(),
         tierMapPlugin(),
+        // Runs in the enrich phase, after onSubmit mapping. If the URL has
+        // ?fbclid=..., polls the _fbp cookie for up to 3s and rewrites the
+        // landingPage payload field with the resynced URL. No-op when the
+        // URL has no fbclid (zero added latency on the common path).
+        fbclidResyncPlugin(),
         submitButtonPlugin(),
         serverValidationPlugin(),
         dataLayerPlugin({
