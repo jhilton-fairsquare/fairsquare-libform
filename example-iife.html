@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Lead Form Sandbox — IIFE drop-in</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; padding: 24px; }
+    form { display: grid; gap: 12px; max-width: 420px; }
+    .field-error { color: #b00020; font-size: 12px; margin-top: 4px; }
+    .is-invalid { border-color: #b00020; outline-color: #b00020; }
+    button[type="submit"] {
+      background: #111; color: white; border: none; padding: 10px 14px;
+      border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center;
+    }
+  </style>
+</head>
+<body>
+  <h2>Framer / Webflow drop-in (IIFE bundle)</h2>
+  <p>Single &lt;script&gt; tag, no module loader, exposes <code>window.FairsquareForm</code>.</p>
+
+  <form data-form="iife-sandbox" novalidate>
+    <input name="businessName" placeholder="Business name" />
+    <input name="fullName" placeholder="Full name" />
+    <input name="email" type="email" placeholder="Email" />
+    <input name="phone" placeholder="Phone (123-456-7890)" />
+    <input name="zipCode" placeholder="ZIP" />
+    <select name="salesDistributionTier">
+      <option value="">Annual revenue…</option>
+      <option value="Tier 1a">Under $120K</option>
+      <option value="Tier 1b">$120K&ndash;$249K</option>
+      <option value="Tier 2a">$250K&ndash;$499K</option>
+      <option value="Tier 2b">$500K&ndash;$999K</option>
+      <option value="Tier 3">Over $1M</option>
+    </select>
+    <label><input name="consent" type="checkbox" value="on" /> Accept privacy policy</label>
+    <button type="submit">Apply Now</button>
+  </form>
+
+  <!-- Drop-in: in production, point this at a CDN-hosted version
+       (e.g. https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@<tag>/dist/fairsquare-form.iife.min.js) -->
+  <script src="./dist/fairsquare-form.iife.min.js"></script>
+  <script>
+    const { createForm, validators, formatters, plugins, dataLayerSources } = FairsquareForm;
+    const { all, required, emailStrict, phoneUS, zipUS, lettersHyphenSpaces, fullNameLettersOnly, mustAccept, requiredSelect } = validators;
+    const { formatPhoneUS, formatZipUS, stripDashes } = formatters;
+
+    const getInput = (formId, name) => () => {
+      const el = document.querySelector('[data-form="' + formId + '"] [name="' + name + '"]');
+      if (!el) return '';
+      if (el.type === 'checkbox') return el.checked ? 'on' : '';
+      return (el.value || '').toString();
+    };
+
+    const handle = createForm({
+      id: 'iife-sandbox',
+      endpoint: 'https://webhook.site/ad36f33f-9e4d-42ad-964d-870718347039',
+      debug: true,
+      fields: {
+        email:                 { get: getInput('iife-sandbox', 'email'),                 validate: all(required(), emailStrict()) },
+        businessName:          { get: getInput('iife-sandbox', 'businessName'),          validate: all(required(), lettersHyphenSpaces('Please enter your business name.')) },
+        fullName:              { get: getInput('iife-sandbox', 'fullName'),              validate: all(required(), fullNameLettersOnly()) },
+        phone:                 { get: getInput('iife-sandbox', 'phone'),                 validate: all(required(), phoneUS()), format: formatPhoneUS },
+        zipCode:               { get: getInput('iife-sandbox', 'zipCode'),               validate: all(required(), zipUS()),   format: formatZipUS },
+        salesDistributionTier: { get: getInput('iife-sandbox', 'salesDistributionTier'), validate: all(requiredSelect()) },
+        consent:               { get: getInput('iife-sandbox', 'consent'),               validate: all(mustAccept()) },
+      },
+      plugins: [
+        plugins.attribution({
+          clientId: { cookieName: 'nfid', persistDays: 365, sameSite: 'Lax', secure: location.protocol === 'https:' },
+        }),
+        plugins.queryParams(),
+        plugins.tierMap(),
+        plugins.staticFields({
+          source: 'NF',
+          formType: 'libform-sandbox',
+          journey: 'NFCoreApply',
+          responseChannel: 'Internet',
+        }),
+        plugins.fbclidResync(),
+        plugins.submitButton(),
+        plugins.serverValidation(),
+        plugins.dataLayer({
+          form_type: 'large_stand_alone_apply_now',
+          reliability: 'auto',
+          reliabilityTimeoutMs: 300,
+          params: {
+            event_tier: { source: 'form',     name: 'salesDistributionTier' },
+            tierDetail: { source: 'form',     name: 'salesDistributionTier', as: 'label' },
+            zip_code:   { source: 'form',     name: 'zipCode', default: '' },
+            event_card: { source: 'response', path: 'event_card', default: 'no card submitted' },
+            state:      { source: 'response', path: 'state', default: '' },
+          },
+        }),
+        plugins.redirectOnUrl(),
+      ],
+      onSubmit: function (values) {
+        return {
+          fullName: values.fullName,
+          email: values.email,
+          phone: stripDashes(values.phone),
+          businessName: values.businessName,
+          zipCode: values.zipCode,
+          consent: values.consent === 'on' || values.consent === true,
+        };
+      },
+      onSuccess: function (res) { console.log('[iife-sandbox] success', res); },
+      onError:   function (err) { console.warn('[iife-sandbox] error', err.status, err.body || err.message); },
+    });
+
+    handle.ready
+      .then(function () { console.log('[iife-sandbox] form ready'); })
+      .catch(function (err) { console.error('[iife-sandbox] mount failed', err); });
+  </script>
+</body>
+</html>
