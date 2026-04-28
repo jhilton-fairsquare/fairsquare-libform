@@ -4,6 +4,7 @@ import { serverValidationPlugin } from "../lib/form-core/plugins/serverValidatio
 import { tierMapPlugin } from "../lib/form-core/plugins/tierMap.js";
 import { queryParamsPlugin } from "../lib/form-core/plugins/queryParams.js";
 import { attributionPlugin } from "../lib/form-core/plugins/attribution.js";
+import { staticFieldsPlugin } from "../lib/form-core/plugins/staticFields.js";
 import { TransportError } from "../lib/form-core/adapters/transport.js";
 
 const fakeCtx = (overrides = {}) => ({
@@ -210,6 +211,70 @@ describe("queryParamsPlugin", () => {
     const out = ctx.onSubmit({});
     expect(out.partnerCode).toBe("abc");
     expect(out.utmSource).toBeUndefined();
+  });
+
+  it("captures gclsrc alongside gclid", () => {
+    setSearch("?gclid=abc&gclsrc=aw.ds");
+    const ctx = { onSubmit: null };
+    queryParamsPlugin().init(ctx);
+    const out = ctx.onSubmit({});
+    expect(out.gclid).toBe("abc");
+    expect(out.gclsrc).toBe("aw.ds");
+  });
+});
+
+describe("staticFieldsPlugin", () => {
+  it("merges statics into payload via enrich (override default)", async () => {
+    const p = staticFieldsPlugin({
+      source: "NF",
+      formType: "DLPv2-2step",
+      journey: "NFCoreApply",
+      responseChannel: "Internet",
+    });
+    const out = await p.enrich({ email: "a@b.com" });
+    expect(out).toMatchObject({
+      email: "a@b.com",
+      source: "NF",
+      formType: "DLPv2-2step",
+      journey: "NFCoreApply",
+      responseChannel: "Internet",
+    });
+  });
+
+  it("override mode beats existing keys (statics are authoritative)", async () => {
+    const p = staticFieldsPlugin({ formType: "OVERRIDE" });
+    const out = await p.enrich({ formType: "wrong", other: 1 });
+    expect(out.formType).toBe("OVERRIDE");
+    expect(out.other).toBe(1);
+  });
+
+  it("fill mode preserves existing keys, only fills empty/missing", async () => {
+    const p = staticFieldsPlugin(
+      { formType: "FROM_STATIC", journey: "NFCoreApply", source: "NF" },
+      { mode: "fill" }
+    );
+    const out = await p.enrich({ formType: "from_consumer", source: "" });
+    expect(out.formType).toBe("from_consumer");   // existing kept
+    expect(out.journey).toBe("NFCoreApply");      // missing filled
+    expect(out.source).toBe("NF");                // empty string filled
+  });
+
+  it("strips null/undefined entries (won't blank out a real value)", async () => {
+    const p = staticFieldsPlugin({
+      formType: "Real",
+      journey: undefined,
+      source: null,
+    });
+    const out = await p.enrich({ journey: "Existing", source: "Existing" });
+    expect(out.formType).toBe("Real");
+    expect(out.journey).toBe("Existing");
+    expect(out.source).toBe("Existing");
+  });
+
+  it("handles empty config gracefully", async () => {
+    const p = staticFieldsPlugin();
+    const out = await p.enrich({ a: 1 });
+    expect(out).toEqual({ a: 1 });
   });
 });
 

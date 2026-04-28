@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   ANNUAL_REVENUE_RANGES, ENTITY_TYPES, INDUSTRIES, CREDIT_RATINGS,
+  RESPONSE_CHANNELS,
   TIER_TO_REVENUE_RANGE, groupTier, oneOf,
 } from "../lib/form-core/enums.js";
 
@@ -10,9 +11,14 @@ describe("API enums (frozen)", () => {
     ["ENTITY_TYPES", ENTITY_TYPES, "LLC"],
     ["INDUSTRIES", INDUSTRIES, "Construction"],
     ["CREDIT_RATINGS", CREDIT_RATINGS, "Good"],
+    ["RESPONSE_CHANNELS", RESPONSE_CHANNELS, "Internet"],
   ])("%s contains %s", (_name, list, member) => {
     expect(list).toContain(member);
     expect(Object.isFrozen(list)).toBe(true);
+  });
+
+  it("RESPONSE_CHANNELS has only the two documented values", () => {
+    expect(RESPONSE_CHANNELS).toEqual(["Internet", "Internet-PURL"]);
   });
 
   it("ANNUAL_REVENUE_RANGES has all 5 NF tiers in order", () => {

@@ -49,6 +49,7 @@
     import { serverValidationPlugin } from './lib/form-core/plugins/serverValidation.js';
     import { dataLayerPlugin } from './lib/form-core/plugins/dataLayer.js';
     import { fbclidResyncPlugin } from './lib/form-core/plugins/fbclidResync.js';
+    import { staticFieldsPlugin } from './lib/form-core/plugins/staticFields.js';
 
     const getInput = (formId, name) => () => {
       const el = document.querySelector(`[data-form="${formId}"] [name="${name}"]`);
@@ -89,6 +90,18 @@
         }),
         queryParamsPlugin(),
         tierMapPlugin(),
+        // Routing-critical statics. Per the Lead Gateway implementation
+        // guide (v1.0): formType determines the validation schema AND the
+        // workflow; journey is a secondary routing parameter the gateway
+        // uses for conditional validation (annualRevenueRange is required
+        // for NFCoreApply, for example). To switch this form to a
+        // different journey (e.g., XPRSApply), change `journey` here.
+        staticFieldsPlugin({
+          source: 'NF',
+          formType: 'libform-sandbox',  // assigned by partner team — case-sensitive
+          journey: 'NFCoreApply',
+          responseChannel: 'Internet',
+        }),
         // Runs in the enrich phase, after onSubmit mapping. If the URL has
         // ?fbclid=..., polls the _fbp cookie for up to 3s and rewrites the
         // landingPage payload field with the resynced URL. No-op when the
@@ -113,12 +126,12 @@
         }),
         redirectOnUrlPlugin(),
       ],
-      // Shape the payload to match the NF Lead Gateway spec. Statics for
-      // source/formType belong here (the API expects them on every submission).
+      // Shape the form values into the Lead Gateway field schema. Routing
+      // statics (source, formType, journey, responseChannel) are handled by
+      // staticFieldsPlugin below — keep this function focused on form-data
+      // mapping only.
       onSubmit(values) {
         return {
-          source: 'NF',
-          formType: 'libform-sandbox',
           fullName: values.fullName,
           email: values.email,
           phone: stripDashes(values.phone), // API strips non-digits, but be explicit
