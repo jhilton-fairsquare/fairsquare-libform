@@ -370,6 +370,7 @@ async function mount(selector, setup, opts = {}) {
   run(initial);
   if (watchReplacement) {
     replaceObserver = new MutationObserver(() => {
+      if (stopped || typeof document === "undefined" || !document) return;
       const el = document.querySelector(selector);
       if (el && el !== lastEl) run(el);
     });
@@ -1319,6 +1320,157 @@ var serverValidationPlugin = (options = {}) => {
   };
 };
 
+// lib/presets/framer.js
+var DEFAULT_FIELDS = {
+  fullName: { class: "FullName", validate: () => fullNameLettersOnly() },
+  firstName: { class: "FirstName", validate: () => lettersHyphenSpaces("Please enter your first name.") },
+  lastName: { class: "LastName", validate: () => lettersHyphenSpaces("Please enter your last name.") },
+  businessName: { class: "BusinessName", validate: () => lettersHyphenSpaces("Please enter your business name.") },
+  email: { class: "Email", validate: () => emailStrict() },
+  phone: { class: "Phone", validate: () => phoneUS(), format: formatPhoneUS },
+  zipCode: { class: "ZipCode", validate: () => zipUS(), format: formatZipUS },
+  salesDistributionTier: { class: "SalesDistributionTier", validate: () => requiredSelect(), kind: "select", coreRule: "select" },
+  consent: { class: "PrivacyPolicyAccepted", validate: () => mustAccept(), kind: "checkbox", coreRule: "accept" }
+};
+var OMIT_WHEN_EMPTY = /* @__PURE__ */ new Set(["businessName", "zipCode", "firstName", "lastName"]);
+var isPresent = (root, klass) => {
+  if (!root) return false;
+  return root.querySelector(`.${klass}`) != null;
+};
+var findRoot = (id) => {
+  if (typeof document === "undefined") return null;
+  return document.querySelector(`[data-form="${id}"]`) || document.getElementById(id) || null;
+};
+var readByClass = (root, klass) => {
+  if (!root) return "";
+  const wrap = root.querySelector(`.${klass}`);
+  if (!wrap) return "";
+  if (wrap.matches("input, select, textarea")) {
+    if (wrap.type === "checkbox") return wrap.checked ? "on" : "";
+    return (wrap.value || "").toString();
+  }
+  const inner = wrap.querySelector("input, select, textarea");
+  if (!inner) return "";
+  if (inner.type === "checkbox") return inner.checked ? "on" : "";
+  return (inner.value || "").toString();
+};
+var deriveCookieDomain = () => {
+  if (typeof location === "undefined" || !location.hostname) return void 0;
+  const parts = location.hostname.split(".");
+  if (parts.length < 2) return void 0;
+  return "." + parts.slice(-2).join(".");
+};
+var defaultEndpoint = () => {
+  if (typeof location === "undefined") return "";
+  return location.hostname.indexOf("nationalfunding") !== -1 ? "https://www.nationalfunding.com/api/forms/submit" : "https://stage.nationalfunding.com/api/forms/submit";
+};
+var optionalize = (validator) => async (value, values) => {
+  const s = value == null ? "" : String(value).trim();
+  if (s === "") return { valid: true, message: "" };
+  return validator(value, values);
+};
+function framerForm(config) {
+  const {
+    id,
+    formType,
+    journey,
+    gaFormType,
+    endpoint = defaultEndpoint(),
+    source = "NF",
+    responseChannel = "Internet",
+    cookieName = "_nfIdSF",
+    cookieDomain = deriveCookieDomain(),
+    optional = [],
+    validators: validatorOverrides = {},
+    fieldClasses = {},
+    dataLayerParams,
+    onSubmit: onSubmitOverride,
+    onSuccess,
+    onError,
+    navigate: navigate2
+  } = config;
+  if (!id) throw new Error("framerForm: `id` is required");
+  if (!formType) throw new Error("framerForm: `formType` is required");
+  if (!gaFormType) throw new Error("framerForm: `gaFormType` is required");
+  const optionalSet = new Set(optional);
+  const fields = {};
+  for (const [name, def] of Object.entries(DEFAULT_FIELDS)) {
+    const klass = fieldClasses[name] || def.class;
+    const get = () => readByClass(findRoot(id), klass);
+    let validate;
+    if (validatorOverrides[name]) {
+      validate = validatorOverrides[name];
+    } else {
+      const core = def.validate();
+      const wantRequired = !optionalSet.has(name) && def.coreRule !== "accept" && def.coreRule !== "select";
+      validate = wantRequired ? all(required(), core) : optionalize(core);
+    }
+    const wrappedValidate = async (value, values) => {
+      if (!isPresent(findRoot(id), klass)) return { valid: true, message: "" };
+      return validate(value, values);
+    };
+    fields[name] = { get, validate: wrappedValidate };
+    if (def.format) fields[name].format = def.format;
+  }
+  const defaultOnSubmit = (values) => {
+    const out = {
+      consent: values.consent === "on" || values.consent === true
+    };
+    if (values.fullName) out.fullName = values.fullName;
+    if (values.firstName) out.firstName = values.firstName;
+    if (values.lastName) out.lastName = values.lastName;
+    if (values.email) out.email = values.email;
+    if (values.phone) out.phone = stripDashes(values.phone);
+    for (const k of Object.keys(values)) {
+      if (k in out) continue;
+      if (OMIT_WHEN_EMPTY.has(k) && !values[k]) continue;
+      if (values[k] !== "" && values[k] != null) out[k] = values[k];
+    }
+    return out;
+  };
+  const defaultDataLayerParams = {
+    event_tier: { source: "form", name: "salesDistributionTier" },
+    tierDetail: { source: "form", name: "salesDistributionTier", as: "label" },
+    zip_code: { source: "form", name: "zipCode", default: "" },
+    event_card: { source: "response", path: "event_card", default: "no card submitted" },
+    state: { source: "response", path: "state", default: "" }
+  };
+  return createForm({
+    id,
+    endpoint,
+    watchReplacement: true,
+    // Framer can re-render forms; rebind if so
+    fields,
+    plugins: [
+      attributionPlugin({
+        clientId: {
+          cookieName,
+          persistDays: 365,
+          sameSite: "Lax",
+          secure: typeof location !== "undefined" && location.protocol === "https:",
+          domain: cookieDomain
+        }
+      }),
+      queryParamsPlugin(),
+      tierMapPlugin(),
+      staticFieldsPlugin({ source, formType, journey, responseChannel }),
+      fbclidResyncPlugin(),
+      submitButtonPlugin(),
+      serverValidationPlugin(),
+      dataLayerPlugin({
+        form_type: gaFormType,
+        reliability: "auto",
+        reliabilityTimeoutMs: 300,
+        params: { ...defaultDataLayerParams, ...dataLayerParams || {} }
+      }),
+      redirectOnUrlPlugin(navigate2 ? { navigate: navigate2 } : void 0)
+    ],
+    onSubmit: onSubmitOverride || defaultOnSubmit,
+    onSuccess,
+    onError
+  });
+}
+
 // lib/index.js
 var plugins = {
   attribution: attributionPlugin,
@@ -1331,6 +1483,7 @@ var plugins = {
   redirectOnUrl: redirectOnUrlPlugin,
   serverValidation: serverValidationPlugin
 };
+var presets = { framer: framerForm };
 var utils = { cookies, querystring };
 export {
   TransportError,
@@ -1339,6 +1492,7 @@ export {
   enums_exports as enums,
   formatters_exports as formatters,
   plugins,
+  presets,
   utils,
   validators_exports as validators
 };
