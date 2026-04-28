@@ -4,13 +4,28 @@
   "description": "Lightweight, extensible form handler library used by National Funding lead-capture pages.",
   "type": "module",
   "private": true,
-  "main": "lib/FormFactory.js",
+  "main": "lib/index.js",
+  "module": "lib/index.js",
+  "exports": {
+    ".": {
+      "import": "./lib/index.js"
+    },
+    "./*": "./lib/*"
+  },
+  "files": [
+    "lib",
+    "dist"
+  ],
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "build": "node scripts/build.mjs",
+    "build:watch": "node scripts/build.mjs --watch",
+    "prepublishOnly": "npm test && npm run build"
   },
   "devDependencies": {
+    "esbuild": "^0.24.0",
     "jsdom": "^25.0.1",
     "vitest": "^2.1.4"
   }
