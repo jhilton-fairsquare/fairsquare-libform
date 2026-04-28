@@ -17,12 +17,19 @@
 <body>
   <form data-form="sandbox" novalidate>
     <input name="businessName" placeholder="Business name" />
-    <input name="firstName" placeholder="First name" />
-    <input name="lastName" placeholder="Last name" />
+    <input name="fullName" placeholder="Full name" />
     <input name="email" type="email" placeholder="Email" />
-    <input name="phoneNumber" placeholder="Phone (123-456-7890)" />
-    <input name="businessZipcode" placeholder="ZIP" />
-    <label><input name="termsAgree" type="checkbox" value="on" /> Accept privacy policy</label>
+    <input name="phone" placeholder="Phone (123-456-7890)" />
+    <input name="zipCode" placeholder="ZIP" />
+    <select name="salesDistributionTier">
+      <option value="">Annual revenue…</option>
+      <option value="Tier 1a">Under $120K</option>
+      <option value="Tier 1b">$120K–$249K</option>
+      <option value="Tier 2a">$250K–$499K</option>
+      <option value="Tier 2b">$500K–$999K</option>
+      <option value="Tier 3">Over $1M</option>
+    </select>
+    <label><input name="consent" type="checkbox" value="on" /> Accept privacy policy</label>
     <button type="submit">Apply Now</button>
   </form>
 
@@ -31,11 +38,15 @@
     import {
       required, all,
       emailStrict, phoneUS, zipUS,
-      lettersHyphenSpaces, mustAccept,
+      lettersHyphenSpaces, fullNameLettersOnly, mustAccept, requiredSelect,
     } from './lib/form-core/validators/index.js';
-    import { formatPhoneUS, formatZipUS } from './lib/form-core/formatters/index.js';
+    import { formatPhoneUS, formatZipUS, stripDashes } from './lib/form-core/formatters/index.js';
     import { attributionPlugin } from './lib/form-core/plugins/attribution.js';
     import { submitButtonPlugin } from './lib/form-core/plugins/submitButton.js';
+    import { queryParamsPlugin } from './lib/form-core/plugins/queryParams.js';
+    import { tierMapPlugin } from './lib/form-core/plugins/tierMap.js';
+    import { redirectOnUrlPlugin } from './lib/form-core/plugins/redirectOnUrl.js';
+    import { serverValidationPlugin } from './lib/form-core/plugins/serverValidation.js';
 
     const getInput = (formId, name) => () => {
       const el = document.querySelector(`[data-form="${formId}"] [name="${name}"]`);
@@ -46,18 +57,23 @@
 
     const handle = createForm({
       id: 'sandbox',
+      // In production this points at the whitelisted public submit endpoint, e.g.
+      //   https://www.nationalfunding.com/api/forms/submit
       endpoint: 'https://webhook.site/ad36f33f-9e4d-42ad-964d-870718347039',
       debug: true,
       fields: {
-        email:           { get: getInput('sandbox', 'email'),           validate: all(required(), emailStrict()) },
-        businessName:    { get: getInput('sandbox', 'businessName'),    validate: all(required(), lettersHyphenSpaces('Please enter your business name.')) },
-        firstName:       { get: getInput('sandbox', 'firstName'),       validate: all(required('First name is required'), lettersHyphenSpaces()) },
-        lastName:        { get: getInput('sandbox', 'lastName'),        validate: all(required('Last name is required'),  lettersHyphenSpaces()) },
-        phoneNumber:     { get: getInput('sandbox', 'phoneNumber'),     validate: all(required(), phoneUS()), format: formatPhoneUS },
-        businessZipcode: { get: getInput('sandbox', 'businessZipcode'), validate: all(required(), zipUS()),   format: formatZipUS },
-        termsAgree:      { get: getInput('sandbox', 'termsAgree'),      validate: all(mustAccept()) },
+        email:                 { get: getInput('sandbox', 'email'),                 validate: all(required(), emailStrict()) },
+        businessName:          { get: getInput('sandbox', 'businessName'),          validate: all(required(), lettersHyphenSpaces('Please enter your business name.')) },
+        fullName:              { get: getInput('sandbox', 'fullName'),              validate: all(required(), fullNameLettersOnly()) },
+        phone:                 { get: getInput('sandbox', 'phone'),                 validate: all(required(), phoneUS()), format: formatPhoneUS },
+        zipCode:               { get: getInput('sandbox', 'zipCode'),               validate: all(required(), zipUS()),   format: formatZipUS },
+        salesDistributionTier: { get: getInput('sandbox', 'salesDistributionTier'), validate: all(requiredSelect()) },
+        consent:               { get: getInput('sandbox', 'consent'),               validate: all(mustAccept()) },
       },
       plugins: [
+        // Order matters: attribution + queryParams + tierMap each wrap onSubmit
+        // and are composed in declaration order. redirect/server-validation hook
+        // post-response and run after consumer onSuccess/onError.
         attributionPlugin({
           clientId: {
             cookieName: 'nfid',
@@ -66,11 +82,31 @@
             secure: location.protocol === 'https:',
           },
         }),
+        queryParamsPlugin(),
+        tierMapPlugin(),
         submitButtonPlugin(),
+        serverValidationPlugin({
+          // Map any divergent API → form field names here (e.g. zipCode → zipCode is fine).
+        }),
+        redirectOnUrlPlugin(),
       ],
-      onSubmit(values) { return { source: 'sandbox', ...values }; },
-      onSuccess() { alert('Thanks!'); },
-      onError(err) { console.warn('submit failed', err); },
+      // Shape the payload to match the NF Lead Gateway spec. Statics for
+      // source/formType belong here (the API expects them on every submission).
+      onSubmit(values) {
+        return {
+          source: 'NF',
+          formType: 'libform-sandbox',
+          fullName: values.fullName,
+          email: values.email,
+          phone: stripDashes(values.phone), // API strips non-digits, but be explicit
+          businessName: values.businessName,
+          zipCode: values.zipCode,
+          consent: values.consent === 'on' || values.consent === true,
+          // salesDistributionTier and annualRevenueRange are filled in by tierMapPlugin
+        };
+      },
+      onSuccess(res) { console.log('[sandbox] success', res); },
+      onError(err)   { console.warn('[sandbox] error', err.status, err.body || err.message); },
     });
 
     handle.ready
