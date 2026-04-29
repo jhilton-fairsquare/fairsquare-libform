@@ -136,36 +136,74 @@ describe("serverValidationPlugin", () => {
 });
 
 describe("tierMapPlugin", () => {
-  it("emits annualRevenueRange by default; salesDistributionTier is NOT shipped (not in API spec)", () => {
-    const ctx = { onSubmit: (v) => ({ ...v }) };
-    tierMapPlugin().init(ctx);
-    const out = ctx.onSubmit({ salesDistributionTier: "Tier 2a", other: "x" });
-    expect(out.annualRevenueRange).toBe("$250K-$499K");
-    expect(out.salesDistributionTier).toBe("Tier 2a"); // came through prev() unchanged; tierMap did not overwrite
-    expect(out.other).toBe("x");
+  describe("input convention 1: form value is the API enum directly", () => {
+    it("passes the enum through verbatim as annualRevenueRange", () => {
+      const ctx = { onSubmit: (v) => ({ ...v }) };
+      tierMapPlugin().init(ctx);
+      const out = ctx.onSubmit({ salesDistributionTier: "$500K-$999K", other: "x" });
+      expect(out.annualRevenueRange).toBe("$500K-$999K");
+      expect(out.other).toBe("x");
+    });
+
+    it("works for every documented enum value", () => {
+      const ctx = { onSubmit: null };
+      tierMapPlugin().init(ctx);
+      for (const range of ["Under $120K", "$120K-$249K", "$250K-$499K", "$500K-$999K", "Over $1M"]) {
+        const out = ctx.onSubmit({ salesDistributionTier: range });
+        expect(out.annualRevenueRange).toBe(range);
+      }
+    });
+
+    it("with tierField opt-in, reverse-derives the grouped tier code", () => {
+      const ctx = { onSubmit: null };
+      tierMapPlugin({ tierField: "salesDistributionTier" }).init(ctx);
+      const out = ctx.onSubmit({ salesDistributionTier: "$500K-$999K" });
+      expect(out.salesDistributionTier).toBe("Tier 2"); // grouped from "Tier 2b"
+      expect(out.annualRevenueRange).toBe("$500K-$999K");
+    });
   });
 
-  it("legacy parity: opt-in tierField restores grouped tier output", () => {
-    const ctx = { onSubmit: null };
-    tierMapPlugin({ tierField: "salesDistributionTier" }).init(ctx);
-    const out = ctx.onSubmit({ salesDistributionTier: "Tier 2a" });
-    expect(out.salesDistributionTier).toBe("Tier 2");
-    expect(out.annualRevenueRange).toBe("$250K-$499K");
+  describe("input convention 2: form value is a legacy Tier code", () => {
+    it("emits annualRevenueRange by default; salesDistributionTier is NOT shipped (not in API spec)", () => {
+      const ctx = { onSubmit: (v) => ({ ...v }) };
+      tierMapPlugin().init(ctx);
+      const out = ctx.onSubmit({ salesDistributionTier: "Tier 2a", other: "x" });
+      expect(out.annualRevenueRange).toBe("$250K-$499K");
+      expect(out.salesDistributionTier).toBe("Tier 2a"); // unchanged passthrough; tierMap did not overwrite
+      expect(out.other).toBe("x");
+    });
+
+    it("legacy parity: opt-in tierField restores grouped tier output", () => {
+      const ctx = { onSubmit: null };
+      tierMapPlugin({ tierField: "salesDistributionTier" }).init(ctx);
+      const out = ctx.onSubmit({ salesDistributionTier: "Tier 2a" });
+      expect(out.salesDistributionTier).toBe("Tier 2");
+      expect(out.annualRevenueRange).toBe("$250K-$499K");
+    });
+
+    it("emits raw (ungrouped) tier when group: false and tierField is set", () => {
+      const ctx = { onSubmit: null };
+      tierMapPlugin({ tierField: "salesDistributionTier", group: false }).init(ctx);
+      const out = ctx.onSubmit({ salesDistributionTier: "Tier 2a" });
+      expect(out.salesDistributionTier).toBe("Tier 2a");
+      expect(out.annualRevenueRange).toBe("$250K-$499K");
+    });
   });
 
-  it("emits raw (ungrouped) tier when group: false and tierField is set", () => {
-    const ctx = { onSubmit: null };
-    tierMapPlugin({ tierField: "salesDistributionTier", group: false }).init(ctx);
-    const out = ctx.onSubmit({ salesDistributionTier: "Tier 2a" });
-    expect(out.salesDistributionTier).toBe("Tier 2a");
-    expect(out.annualRevenueRange).toBe("$250K-$499K");
-  });
+  describe("malformed input", () => {
+    it("does nothing when source field is empty", () => {
+      const ctx = { onSubmit: null };
+      tierMapPlugin().init(ctx);
+      const out = ctx.onSubmit({ salesDistributionTier: "" });
+      expect(out.annualRevenueRange).toBeUndefined();
+    });
 
-  it("does nothing when source field is empty", () => {
-    const ctx = { onSubmit: null };
-    tierMapPlugin().init(ctx);
-    const out = ctx.onSubmit({ salesDistributionTier: "" });
-    expect(out.annualRevenueRange).toBeUndefined();
+    it("does NOT emit when value matches neither enum nor tier code", () => {
+      const ctx = { onSubmit: null };
+      tierMapPlugin().init(ctx);
+      const out = ctx.onSubmit({ salesDistributionTier: "approximately $500k" });
+      expect(out.annualRevenueRange).toBeUndefined();
+    });
   });
 
   it("preserves existing onSubmit (composes)", () => {

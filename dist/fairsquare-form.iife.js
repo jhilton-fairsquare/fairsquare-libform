@@ -487,6 +487,7 @@ var FairsquareForm = (() => {
     maxLength: () => maxLength,
     minLength: () => minLength,
     mustAccept: () => mustAccept,
+    oneOf: () => oneOf,
     pattern: () => pattern,
     phoneBasic: () => phoneBasic,
     phoneDashedUS: () => phoneDashedUS,
@@ -495,6 +496,75 @@ var FairsquareForm = (() => {
     requiredSelect: () => requiredSelect,
     zipUS: () => zipUS
   });
+
+  // lib/form-core/enums.js
+  var enums_exports = {};
+  __export(enums_exports, {
+    ANNUAL_REVENUE_RANGES: () => ANNUAL_REVENUE_RANGES,
+    CREDIT_RATINGS: () => CREDIT_RATINGS,
+    ENTITY_TYPES: () => ENTITY_TYPES,
+    INDUSTRIES: () => INDUSTRIES,
+    RESPONSE_CHANNELS: () => RESPONSE_CHANNELS,
+    TIER_TO_REVENUE_RANGE: () => TIER_TO_REVENUE_RANGE,
+    groupTier: () => groupTier,
+    oneOf: () => oneOf
+  });
+  var ANNUAL_REVENUE_RANGES = Object.freeze([
+    "Under $120K",
+    "$120K-$249K",
+    "$250K-$499K",
+    "$500K-$999K",
+    "Over $1M"
+  ]);
+  var ENTITY_TYPES = Object.freeze([
+    "Sole Proprietorship",
+    "Partnership",
+    "S Corp",
+    "C Corp",
+    "LLC"
+  ]);
+  var CREDIT_RATINGS = Object.freeze(["Excellent", "Good", "Fair", "Poor"]);
+  var RESPONSE_CHANNELS = Object.freeze(["Internet", "Internet-PURL"]);
+  var INDUSTRIES = Object.freeze([
+    "Administrative Support",
+    "Agriculture",
+    "Arts Entertainment and Recreation",
+    "Auto Repair",
+    "Commercial Trucking",
+    "Construction",
+    "Educational Services",
+    "Finance and Insurance",
+    "Healthcare and Social Assistance",
+    "Landscaping",
+    "Manufacturing",
+    "Medical Practice",
+    "Mining",
+    "Professional Scientific and Technical Services",
+    "Public Administration",
+    "Real Estate and Leasing",
+    "Restaurants and Food Services",
+    "Retail",
+    "Utilities",
+    "Wholesale Trade",
+    "Other"
+  ]);
+  var TIER_TO_REVENUE_RANGE = Object.freeze({
+    "Tier 1a": "Under $120K",
+    "Tier 1b": "$120K-$249K",
+    "Tier 2a": "$250K-$499K",
+    "Tier 2b": "$500K-$999K",
+    "Tier 3": "Over $1M"
+  });
+  var groupTier = (tier) => {
+    if (typeof tier !== "string") return "";
+    return tier.replace(/\bTier 1[ab]\b/, "Tier 1").replace(/\bTier 2[ab]\b/, "Tier 2");
+  };
+  var oneOf = (allowed, msg) => async (value) => {
+    const s = value == null ? "" : String(value);
+    return allowed.includes(s) ? { valid: true, message: "" } : { valid: false, message: msg || `Must be one of: ${allowed.join(", ")}` };
+  };
+
+  // lib/form-core/validators/index.js
   var ok = () => ({ valid: true, message: "" });
   var fail = (message) => ({ valid: false, message });
   var toStr = (v) => {
@@ -640,73 +710,6 @@ var FairsquareForm = (() => {
   };
   var formatZipUS = (raw) => toStr2(raw).replace(/\D/g, "").slice(0, 5);
   var stripDashes = (raw) => toStr2(raw).replace(/-/g, "");
-
-  // lib/form-core/enums.js
-  var enums_exports = {};
-  __export(enums_exports, {
-    ANNUAL_REVENUE_RANGES: () => ANNUAL_REVENUE_RANGES,
-    CREDIT_RATINGS: () => CREDIT_RATINGS,
-    ENTITY_TYPES: () => ENTITY_TYPES,
-    INDUSTRIES: () => INDUSTRIES,
-    RESPONSE_CHANNELS: () => RESPONSE_CHANNELS,
-    TIER_TO_REVENUE_RANGE: () => TIER_TO_REVENUE_RANGE,
-    groupTier: () => groupTier,
-    oneOf: () => oneOf
-  });
-  var ANNUAL_REVENUE_RANGES = Object.freeze([
-    "Under $120K",
-    "$120K-$249K",
-    "$250K-$499K",
-    "$500K-$999K",
-    "Over $1M"
-  ]);
-  var ENTITY_TYPES = Object.freeze([
-    "Sole Proprietorship",
-    "Partnership",
-    "S Corp",
-    "C Corp",
-    "LLC"
-  ]);
-  var CREDIT_RATINGS = Object.freeze(["Excellent", "Good", "Fair", "Poor"]);
-  var RESPONSE_CHANNELS = Object.freeze(["Internet", "Internet-PURL"]);
-  var INDUSTRIES = Object.freeze([
-    "Administrative Support",
-    "Agriculture",
-    "Arts Entertainment and Recreation",
-    "Auto Repair",
-    "Commercial Trucking",
-    "Construction",
-    "Educational Services",
-    "Finance and Insurance",
-    "Healthcare and Social Assistance",
-    "Landscaping",
-    "Manufacturing",
-    "Medical Practice",
-    "Mining",
-    "Professional Scientific and Technical Services",
-    "Public Administration",
-    "Real Estate and Leasing",
-    "Restaurants and Food Services",
-    "Retail",
-    "Utilities",
-    "Wholesale Trade",
-    "Other"
-  ]);
-  var TIER_TO_REVENUE_RANGE = Object.freeze({
-    "Tier 1a": "Under $120K",
-    "Tier 1b": "$120K-$249K",
-    "Tier 2a": "$250K-$499K",
-    "Tier 2b": "$500K-$999K",
-    "Tier 3": "Over $1M"
-  });
-  var groupTier = (tier) => {
-    if (typeof tier !== "string") return "";
-    return tier.replace(/\bTier 1[ab]\b/, "Tier 1").replace(/\bTier 2[ab]\b/, "Tier 2");
-  };
-  var oneOf = (allowed, msg) => async (value) => {
-    const s = value == null ? "" : String(value);
-    return allowed.includes(s) ? { valid: true, message: "" } : { valid: false, message: msg || `Must be one of: ${allowed.join(", ")}` };
-  };
 
   // lib/utils/cookies.js
   var cookies = {
@@ -939,6 +942,10 @@ var FairsquareForm = (() => {
   };
 
   // lib/form-core/plugins/tierMap.js
+  var REVENUE_TO_TIER = Object.freeze(
+    Object.fromEntries(Object.entries(TIER_TO_REVENUE_RANGE).map(([tier, range]) => [range, tier]))
+  );
+  var VALID_RANGES = new Set(ANNUAL_REVENUE_RANGES);
   var tierMapPlugin = (options = {}) => {
     const {
       sourceField = "salesDistributionTier",
@@ -952,15 +959,20 @@ var FairsquareForm = (() => {
         ctx.onSubmit = (values) => {
           const base = prev ? prev(values) : values;
           const payload = base || values || {};
-          const tier = values && values[sourceField] || payload[sourceField] || "";
-          const out = { ...payload };
-          if (tier) {
-            if (tierField) out[tierField] = group ? groupTier(tier) : tier;
-            if (revenueRangeField) {
-              const range = TIER_TO_REVENUE_RANGE[tier];
-              if (range) out[revenueRangeField] = range;
-            }
+          const raw = values && values[sourceField] || payload[sourceField] || "";
+          if (!raw) return payload;
+          let range;
+          let tierCode;
+          if (VALID_RANGES.has(raw)) {
+            range = raw;
+            tierCode = REVENUE_TO_TIER[raw];
+          } else if (TIER_TO_REVENUE_RANGE[raw]) {
+            range = TIER_TO_REVENUE_RANGE[raw];
+            tierCode = raw;
           }
+          const out = { ...payload };
+          if (range && revenueRangeField) out[revenueRangeField] = range;
+          if (tierCode && tierField) out[tierField] = group ? groupTier(tierCode) : tierCode;
           return out;
         };
       }
@@ -1358,22 +1370,41 @@ var FairsquareForm = (() => {
     email: { class: "Email", validate: () => emailStrict() },
     phone: { class: "Phone", validate: () => phoneUS(), format: formatPhoneUS },
     zipCode: { class: "ZipCode", validate: () => zipUS(), format: formatZipUS },
-    salesDistributionTier: { class: "SalesDistributionTier", validate: () => requiredSelect(), kind: "select", coreRule: "select" },
+    // `annualRevenueRange` matches the API field name 1:1. Form value must
+    // be one of the documented enum strings (e.g., "$500K-$999K"); the
+    // validator surfaces typos at the form layer rather than as a 400 from
+    // the gateway. `salesDistributionTier` is accepted as a legacy alt name
+    // for pages still wired with the previous form-field key.
+    annualRevenueRange: {
+      class: "SalesDistributionTier",
+      altNames: ["salesDistributionTier"],
+      validate: () => all(
+        requiredSelect(),
+        oneOf(ANNUAL_REVENUE_RANGES, "Please select a valid revenue range.")
+      ),
+      kind: "select",
+      coreRule: "select"
+    },
     consent: { class: "PrivacyPolicyAccepted", validate: () => mustAccept(), kind: "checkbox", coreRule: "accept" }
   };
   var OMIT_WHEN_EMPTY = /* @__PURE__ */ new Set(["businessName", "zipCode"]);
-  var INTERNAL_FIELDS = /* @__PURE__ */ new Set(["firstName", "lastName", "salesDistributionTier"]);
+  var INTERNAL_FIELDS = /* @__PURE__ */ new Set(["firstName", "lastName"]);
   var findRoot = (id) => {
     if (typeof document === "undefined") return null;
     return document.querySelector(`[data-form="${id}"]`) || document.getElementById(id) || null;
   };
-  var resolveField = (root, name, klass) => {
+  var resolveField = (root, name, klass, altNames = []) => {
     if (!root) return null;
-    return root.querySelector(`[name="${name}"]`) || root.querySelector(`.${klass}`) || null;
+    const candidates = [name, ...altNames];
+    for (const n of candidates) {
+      const el = root.querySelector(`[name="${n}"]`);
+      if (el) return el;
+    }
+    return root.querySelector(`.${klass}`) || null;
   };
-  var fieldPresent = (root, name, klass) => resolveField(root, name, klass) != null;
-  var readField = (root, name, klass) => {
-    const wrap = resolveField(root, name, klass);
+  var fieldPresent = (root, name, klass, altNames) => resolveField(root, name, klass, altNames) != null;
+  var readField = (root, name, klass, altNames) => {
+    const wrap = resolveField(root, name, klass, altNames);
     if (!wrap) return "";
     if (wrap.matches("input, select, textarea")) {
       if (wrap.type === "checkbox") return wrap.checked ? "on" : "";
@@ -1427,7 +1458,8 @@ var FairsquareForm = (() => {
     const fields = {};
     for (const [name, def] of Object.entries(DEFAULT_FIELDS)) {
       const klass = fieldClasses[name] || def.class;
-      const get = () => readField(findRoot(id), name, klass);
+      const altNames = def.altNames || [];
+      const get = () => readField(findRoot(id), name, klass, altNames);
       let validate;
       if (validatorOverrides[name]) {
         validate = validatorOverrides[name];
@@ -1437,7 +1469,7 @@ var FairsquareForm = (() => {
         validate = wantRequired ? all(required(), core) : optionalize(core);
       }
       const wrappedValidate = async (value, values) => {
-        if (!fieldPresent(findRoot(id), name, klass)) return { valid: true, message: "" };
+        if (!fieldPresent(findRoot(id), name, klass, altNames)) return { valid: true, message: "" };
         return validate(value, values);
       };
       fields[name] = { get, validate: wrappedValidate };
@@ -1461,8 +1493,8 @@ var FairsquareForm = (() => {
       return out;
     };
     const defaultDataLayerParams = {
-      event_tier: { source: "form", name: "salesDistributionTier" },
-      tierDetail: { source: "form", name: "salesDistributionTier", as: "label" },
+      event_tier: { source: "form", name: "annualRevenueRange" },
+      tierDetail: { source: "form", name: "annualRevenueRange", as: "label" },
       zip_code: { source: "form", name: "zipCode", default: "" },
       event_card: { source: "response", path: "event_card", default: "no card submitted" },
       state: { source: "response", path: "state", default: "" }
@@ -1484,7 +1516,6 @@ var FairsquareForm = (() => {
           }
         }),
         queryParamsPlugin(),
-        tierMapPlugin(),
         staticFieldsPlugin({ source, formType, journey, responseChannel }),
         fbclidResyncPlugin(),
         submitButtonPlugin(),
@@ -1506,7 +1537,8 @@ var FairsquareForm = (() => {
         const root = findRoot(id);
         if (!root) return;
         const cls = (n) => fieldClasses[n] || DEFAULT_FIELDS[n].class;
-        const has = (n) => fieldPresent(root, n, cls(n));
+        const altNames = (n) => DEFAULT_FIELDS[n].altNames || [];
+        const has = (n) => fieldPresent(root, n, cls(n), altNames(n));
         const hint = (n) => `name="${n}" (or legacy class ".${cls(n)}")`;
         const missing = [];
         if (!has("fullName") && !(has("firstName") && has("lastName"))) {
@@ -1514,7 +1546,7 @@ var FairsquareForm = (() => {
             `name \u2014 set ${hint("fullName")} on one input, OR ${hint("firstName")} + ${hint("lastName")} on two separate inputs`
           );
         }
-        for (const f of ["email", "phone", "salesDistributionTier", "consent"]) {
+        for (const f of ["email", "phone", "annualRevenueRange", "consent"]) {
           if (!has(f)) missing.push(`${f} \u2014 set ${hint(f)} on the corresponding input`);
         }
         if (missing.length === 0) return;

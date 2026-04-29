@@ -59,7 +59,7 @@ describe("framerForm: default form (full set of fields)", () => {
         <div class="SalesDistributionTier">
           <select>
             <option value="">--</option>
-            <option value="Tier 2a">$250K-$499K</option>
+            <option value="$250K-$499K">$250K-$499K</option>
           </select>
         </div>
         <label class="PrivacyPolicyAccepted"><input type="checkbox" /> Accept</label>
@@ -86,7 +86,7 @@ describe("framerForm: default form (full set of fields)", () => {
     document.querySelector(".Email input").value = "ada@example.com";
     document.querySelector(".Phone input").value = "212-555-0100";
     document.querySelector(".ZipCode input").value = "10001";
-    document.querySelector(".SalesDistributionTier select").value = "Tier 2a";
+    document.querySelector(".SalesDistributionTier select").value = "$250K-$499K";
     document.querySelector(".PrivacyPolicyAccepted input").checked = true;
 
     submit("f1");
@@ -139,7 +139,7 @@ describe("framerForm: default form (full set of fields)", () => {
     document.querySelector(".Email input").value = "not-an-email";
     document.querySelector(".Phone input").value = "212-555-0100";
     document.querySelector(".ZipCode input").value = "10001";
-    document.querySelector(".SalesDistributionTier select").value = "Tier 2a";
+    document.querySelector(".SalesDistributionTier select").value = "$250K-$499K";
     document.querySelector(".PrivacyPolicyAccepted input").checked = true;
 
     submit("f1");
@@ -160,7 +160,7 @@ describe("framerForm: auto-skip missing field wrappers", () => {
         <div class="SalesDistributionTier">
           <select>
             <option value="">--</option>
-            <option value="Tier 2a" selected>$250K-$499K</option>
+            <option value="$250K-$499K" selected>$250K-$499K</option>
           </select>
         </div>
         <label class="PrivacyPolicyAccepted"><input type="checkbox" checked /> Accept</label>
@@ -206,7 +206,7 @@ describe("framerForm: optional[] only relaxes required, keeps rule for non-empty
         <div class="SalesDistributionTier">
           <select>
             <option value="">--</option>
-            <option value="Tier 2a" selected>$250K-$499K</option>
+            <option value="$250K-$499K" selected>$250K-$499K</option>
           </select>
         </div>
         <label class="PrivacyPolicyAccepted"><input type="checkbox" checked /> Accept</label>
@@ -257,7 +257,7 @@ describe("framerForm: validators{} replaces a chain entirely", () => {
         <div class="Phone"><input value="2125550100" /></div>
         <div class="ZipCode"><input value="10001" /></div>
         <div class="SalesDistributionTier">
-          <select><option value="">--</option><option value="Tier 2a" selected>$250K-$499K</option></select>
+          <select><option value="">--</option><option value="$250K-$499K" selected>$250K-$499K</option></select>
         </div>
         <label class="PrivacyPolicyAccepted"><input type="checkbox" checked /> Accept</label>
       `
@@ -291,7 +291,7 @@ describe("framerForm: two presets on the same page", () => {
         <div class="FullName"><input value="Ada A" /></div>
         <div class="Email"><input value="a@example.com" /></div>
         <div class="Phone"><input value="2125550100" /></div>
-        <div class="SalesDistributionTier"><select><option value="Tier 1a" selected>Under $120K</option></select></div>
+        <div class="SalesDistributionTier"><select><option value="Under $120K" selected>Under $120K</option></select></div>
         <label class="PrivacyPolicyAccepted"><input type="checkbox" checked /> Accept</label>
         <button type="submit">Go</button>
       </form>
@@ -299,7 +299,7 @@ describe("framerForm: two presets on the same page", () => {
         <div class="FullName"><input value="Ada B" /></div>
         <div class="Email"><input value="b@example.com" /></div>
         <div class="Phone"><input value="2125550100" /></div>
-        <div class="SalesDistributionTier"><select><option value="Tier 3" selected>Over $1M</option></select></div>
+        <div class="SalesDistributionTier"><select><option value="Over $1M" selected>Over $1M</option></select></div>
         <label class="PrivacyPolicyAccepted"><input type="checkbox" checked /> Accept</label>
         <button type="submit">Go</button>
       </form>
@@ -334,7 +334,7 @@ describe("framerForm: name= attribute resolution (primary)", () => {
         <input name="email"    value="ada@example.com" />
         <input name="phone"    value="2125550100" />
         <select name="salesDistributionTier">
-          <option value="Tier 2a" selected>$250K-$499K</option>
+          <option value="$250K-$499K" selected>$250K-$499K</option>
         </select>
         <input type="checkbox" name="consent" checked />
       `
@@ -373,7 +373,7 @@ describe("framerForm: name= attribute resolution (primary)", () => {
         <div class="Email"><input value="legacy@example.com" /></div>
         <input name="fullName" value="Ada Lovelace" />
         <input name="phone" value="2125550100" />
-        <select name="salesDistributionTier"><option value="Tier 2a" selected>X</option></select>
+        <select name="salesDistributionTier"><option value="$250K-$499K" selected>X</option></select>
         <input type="checkbox" name="consent" checked />
       `
     );
@@ -393,7 +393,7 @@ describe("framerForm: name= attribute resolution (primary)", () => {
         <input name="fullName" value="Ada Lovelace" />
         <div class="Email"><input value="ada@example.com" /></div>
         <input name="phone" value="2125550100" />
-        <div class="SalesDistributionTier"><select><option value="Tier 1a" selected>U</option></select></div>
+        <div class="SalesDistributionTier"><select><option value="Under $120K" selected>U</option></select></div>
         <label class="PrivacyPolicyAccepted"><input type="checkbox" checked /></label>
       `
     );
@@ -420,7 +420,7 @@ describe("framerForm: name= attribute resolution (primary)", () => {
         <input name="lastName"  value="Lovelace" />
         <input name="email"     value="ada@example.com" />
         <input name="phone"     value="2125550100" />
-        <select name="salesDistributionTier"><option value="Tier 2a" selected>X</option></select>
+        <select name="salesDistributionTier"><option value="$250K-$499K" selected>X</option></select>
         <input type="checkbox" name="consent" checked />
       `
     );
@@ -437,6 +437,62 @@ describe("framerForm: name= attribute resolution (primary)", () => {
   });
 });
 
+describe("framerForm: dropdown can emit annualRevenueRange enum directly", () => {
+  it("option value = API enum string yields annualRevenueRange verbatim", async () => {
+    buildForm(
+      "ar",
+      `
+        <input name="fullName" value="Ada Lovelace" />
+        <input name="email"    value="ada@example.com" />
+        <input name="phone"    value="2125550100" />
+        <select name="salesDistributionTier">
+          <option value="Under $120K">Under $120K</option>
+          <option value="$120K-$249K">$120K-$249K</option>
+          <option value="$250K-$499K">$250K-$499K</option>
+          <option value="$500K-$999K" selected>$500K-$999K</option>
+          <option value="Over $1M">Over $1M</option>
+        </select>
+        <input type="checkbox" name="consent" checked />
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({ id: "ar", formType: "Framer", gaFormType: "x", navigate: () => {} });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("ar");
+    await tick();
+    const payload = t.send.mock.calls[0][0];
+    expect(payload.annualRevenueRange).toBe("$500K-$999K");
+    expect(payload.salesDistributionTier).toBeUndefined();
+  });
+
+  it("legacy name=\"salesDistributionTier\" attribute still resolves (back-compat alt name)", async () => {
+    // Pages wired with the older form-field name continue to work after the
+    // v0.3.1 rename: DEFAULT_FIELDS.annualRevenueRange.altNames includes
+    // "salesDistributionTier", so the resolver picks up either spelling.
+    buildForm(
+      "ar2",
+      `
+        <input name="fullName" value="Ada Lovelace" />
+        <input name="email"    value="ada@example.com" />
+        <input name="phone"    value="2125550100" />
+        <select name="salesDistributionTier">
+          <option value="$500K-$999K" selected>$500K-$999K</option>
+        </select>
+        <input type="checkbox" name="consent" checked />
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({ id: "ar2", formType: "Framer", gaFormType: "x", navigate: () => {} });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("ar2");
+    await tick();
+    const payload = t.send.mock.calls[0][0];
+    expect(payload.annualRevenueRange).toBe("$500K-$999K");
+  });
+});
+
 describe("framerForm: spec-conformance — wire payload contains only documented fields", () => {
   it("default payload has no salesDistributionTier, no nfid, no path, no responseChannel, no firstName/lastName", async () => {
     buildForm(
@@ -446,7 +502,7 @@ describe("framerForm: spec-conformance — wire payload contains only documented
         <input name="lastName"  value="Lovelace" />
         <input name="email"     value="ada@example.com" />
         <input name="phone"     value="2125550100" />
-        <select name="salesDistributionTier"><option value="Tier 2b" selected>X</option></select>
+        <select name="salesDistributionTier"><option value="$500K-$999K" selected>X</option></select>
         <input type="checkbox" name="consent" checked />
       `
     );
@@ -490,7 +546,7 @@ describe("framerForm: spec-conformance — wire payload contains only documented
         <input name="fullName" value="Ada Lovelace" />
         <input name="email"    value="ada@example.com" />
         <input name="phone"    value="2125550100" />
-        <select name="salesDistributionTier"><option value="Tier 2a" selected>X</option></select>
+        <select name="salesDistributionTier"><option value="$250K-$499K" selected>X</option></select>
         <input type="checkbox" name="consent" checked />
       `
     );
@@ -538,7 +594,7 @@ describe("framerForm: mount-time wiring diagnostic", () => {
     expect(msg).toContain('name="fullName"');
     expect(msg).toContain('name="email"');
     expect(msg).toContain('name="phone"');
-    expect(msg).toContain('name="salesDistributionTier"');
+    expect(msg).toContain('name="annualRevenueRange"');
     expect(msg).toContain('name="consent"');
     expect(msg).toContain(".FullName");
     expect(msg).toContain(".Email");
@@ -555,7 +611,7 @@ describe("framerForm: mount-time wiring diagnostic", () => {
         <input name="fullName" />
         <input name="email" />
         <input name="phone" />
-        <select name="salesDistributionTier"><option value="Tier 1a">x</option></select>
+        <select name="salesDistributionTier"><option value="Under $120K">x</option></select>
         <input type="checkbox" name="consent" />
       `
     );
@@ -574,7 +630,7 @@ describe("framerForm: mount-time wiring diagnostic", () => {
         <div class="FullName"><input value="Ada Lovelace" /></div>
         <div class="Email"><input value="ada@example.com" /></div>
         <div class="Phone"><input value="2125550100" /></div>
-        <div class="SalesDistributionTier"><select><option value="Tier 2a" selected>X</option></select></div>
+        <div class="SalesDistributionTier"><select><option value="$250K-$499K" selected>X</option></select></div>
         <label class="PrivacyPolicyAccepted"><input type="checkbox" checked /> Accept</label>
       `
     );
@@ -594,7 +650,7 @@ describe("framerForm: mount-time wiring diagnostic", () => {
         <div class="LastName"><input value="Lovelace" /></div>
         <div class="Email"><input value="ada@example.com" /></div>
         <div class="Phone"><input value="2125550100" /></div>
-        <div class="SalesDistributionTier"><select><option value="Tier 2a" selected>X</option></select></div>
+        <div class="SalesDistributionTier"><select><option value="$250K-$499K" selected>X</option></select></div>
         <label class="PrivacyPolicyAccepted"><input type="checkbox" checked /> Accept</label>
       `
     );
@@ -629,7 +685,7 @@ describe("framerForm: mount-time wiring diagnostic", () => {
       <form id="f-override">
         <div class="FullName"><input /></div>
         <div class="Phone"><input /></div>
-        <div class="SalesDistributionTier"><select><option value="Tier 1a" selected>x</option></select></div>
+        <div class="SalesDistributionTier"><select><option value="Under $120K" selected>x</option></select></div>
         <label class="PrivacyPolicyAccepted"><input type="checkbox" /></label>
         <button type="submit">Go</button>
       </form>
@@ -662,7 +718,7 @@ describe("framerForm: FirstName/LastName variant (no FullName wrapper)", () => {
         <div class="Email"><input value="ada@example.com" /></div>
         <div class="Phone"><input value="2125550100" /></div>
         <div class="ZipCode"><input value="10001" /></div>
-        <div class="SalesDistributionTier"><select><option value="Tier 2a" selected>X</option></select></div>
+        <div class="SalesDistributionTier"><select><option value="$250K-$499K" selected>X</option></select></div>
         <label class="PrivacyPolicyAccepted"><input type="checkbox" checked /> Accept</label>
       `
     );

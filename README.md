@@ -50,10 +50,11 @@ import { createForm, validators, plugins } from "@fairsquare/libform/dist/fairsq
 
 For Fairsquare's standard Framer landing pages, use the `framer` preset. It handles strict validators, all 9 plugins in the right order, the `_nfIdSF` cookie, the eTLD+1 cookie domain, and the endpoint switch by hostname. Fields resolve by HTML `name` attribute (Framer's right-panel "Name" property sets this natively — no Code Override required), with a legacy class-name fallback for hosts that pre-date the `name=` contract.
 
-**The wire payload contains only fields documented in the [NF Lead Gateway Integration Guide](../NF-Lead-Gateway-Vendor-Integration-Guide.md) Field Reference.** Internal-only keys (`firstName`/`lastName` are combined into `fullName` per the spec; `salesDistributionTier` is reduced to its spec-documented `annualRevenueRange`; `nfid`/`path` are no longer shipped) stay inside the library where validators and plugins use them.
+**The wire payload contains only fields documented in the [NF Lead Gateway Integration Guide](../NF-Lead-Gateway-Vendor-Integration-Guide.md) Field Reference.** Form-field keys match the API field names 1:1 wherever possible (e.g., `annualRevenueRange` is both the form key and the wire field). The only internal-only keys are `firstName`/`lastName`, which are read for validators and combined into `fullName` before submission per the spec.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.3.0/dist/fairsquare-form.iife.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.3.1/dist/fairsquare-form.iife.min.js"></script>
+<!-- v0.3.1 rename: form-field key `salesDistributionTier` → `annualRevenueRange`. Legacy name= and class still resolve via back-compat. -->
 <script>
   FairsquareForm.presets.framer({
     id: "framer-form-1",
@@ -112,22 +113,24 @@ Each field is resolved by `[name="<key>"]` first, then by `.<LegacyClass>` if no
 | `email` | `.Email` | `email` | `required` + `emailStrict` |
 | `phone` | `.Phone` | `phone` (digits only) | `required` + `phoneUS` (live-formatted) |
 | `zipCode` | `.ZipCode` | `zipCode` | `required` + `zipUS` (live-formatted) |
-| `salesDistributionTier` | `.SalesDistributionTier` | `annualRevenueRange` (mapped from tier code) | `requiredSelect` |
+| `annualRevenueRange` (legacy `salesDistributionTier` accepted) | `.SalesDistributionTier` | `annualRevenueRange` | `requiredSelect` + `oneOf(ANNUAL_REVENUE_RANGES)` |
 | `consent` | `.PrivacyPolicyAccepted` | `consent` (boolean) | `mustAccept` |
 
-The preset uses `fullName` if present; otherwise it falls back to `firstName` + `lastName`, joining them with a space before shipping. The internal form keys `firstName`, `lastName`, and `salesDistributionTier` never appear in the wire payload.
+The preset uses `fullName` if present; otherwise it falls back to `firstName` + `lastName`, joining them with a space before shipping. `firstName` and `lastName` never appear in the wire payload.
 
-**Annual sales `<select>` option values must be tier codes** — the form-side value goes through `tierMapPlugin` to derive `annualRevenueRange`. Use the dropdown's labels for human-readable text but the values must be the internal tier codes:
+**Annual sales `<select>` option values must be valid API enum strings.** Each `<option value>` is shipped verbatim as `annualRevenueRange`, and the validator rejects anything else at the form layer (so a typo surfaces in dev, not as a 400 from the gateway):
 
-| Label | Option value |
+| Label (visible to user) | Recommended option value (API enum) |
 |---|---|
-| Under $120K | `Tier 1a` |
-| $120K-$249K | `Tier 1b` |
-| $250K-$499K | `Tier 2a` |
-| $500K-$999K | `Tier 2b` |
-| Over $1M | `Tier 3` |
+| Under $120K | `Under $120K` |
+| $120K-$249K | `$120K-$249K` |
+| $250K-$499K | `$250K-$499K` |
+| $500K-$999K | `$500K-$999K` |
+| Over $1M | `Over $1M` |
 
-**Authoring in Framer (recommended):** select each input on the canvas → right panel → set the **Name** property to the form key from the table above (`fullName`, `email`, `phone`, `salesDistributionTier`, `consent`). No Code Override needed.
+For pages still authored with prod's legacy Tier codes (`Tier 1a` / `Tier 1b` / `Tier 2a` / `Tier 2b` / `Tier 3`), opt the `tierMapPlugin` back into the chain explicitly — it converts Tier codes to API enum values. The preset doesn't include it by default; the goal is for the form to produce the API value directly.
+
+**Authoring in Framer (recommended):** select each input on the canvas → right panel → set the **Name** property to the form key from the table above (`fullName`, `email`, `phone`, `annualRevenueRange`, `consent`). No Code Override needed.
 
 **Legacy class wiring (existing prod pages):** add the corresponding class via a Code Override — `withFullName`, `withEmail`, etc. — that appends the class to the element's `className`. Continues to work unchanged.
 
@@ -316,11 +319,15 @@ Options: `map` (replace defaults), `extraMap` (extend), `useDefaults`, `namespac
 
 ### `tierMapPlugin(options?)`
 
-Reads a tier code from the form (default field `salesDistributionTier`) and writes the spec-documented `annualRevenueRange` enum to the payload via `enums.TIER_TO_REVENUE_RANGE`.
+Migration helper for pages whose dropdowns still use prod's legacy Tier codes (`"Tier 2a"`) as `<option value>`s. **Not included in the framer preset's default chain as of v0.3.1** — the recommended authoring is to put the API enum string directly into the option value, in which case no plugin is needed.
 
-By default `salesDistributionTier` is **not** shipped on the wire (it's an internal form key, not a documented API field). To restore the legacy parity output, pass `tierField: "salesDistributionTier"`.
+When opted in, the plugin reads a value from the form (default field `salesDistributionTier`) and resolves it either way:
+- Form value matches a documented `annualRevenueRange` enum (e.g., `"$500K-$999K"`) → emit verbatim
+- Form value is a legacy Tier code (e.g., `"Tier 2b"`) → look up via `enums.TIER_TO_REVENUE_RANGE` → emit the corresponding enum
 
-Options: `sourceField` (input form key), `tierField` (output key, default `null`), `revenueRangeField` (output key, default `"annualRevenueRange"`), `group` (default true; emits grouped `Tier 2` instead of `Tier 2a` when `tierField` is set).
+Options: `sourceField` (input form key, default `"salesDistributionTier"`), `tierField` (legacy parity output key, default `null` — set to a string to also emit a tier code), `revenueRangeField` (default `"annualRevenueRange"`), `group` (default true; emits grouped `Tier 2` instead of `Tier 2a` when `tierField` is set).
+
+Use this only as a one-time migration helper while you update legacy `<option value>` strings to the API enum.
 
 ### `staticFieldsPlugin(statics, options?)`
 
@@ -363,8 +370,8 @@ plugins.dataLayer({
   reliability: "auto",                 // 'auto' | 'eventCallback' | 'microtask' | 'delay' | 'none'
   reliabilityTimeoutMs: 300,
   params: {
-    event_tier: { source: "form",     name: "salesDistributionTier" },                // raw value
-    tierDetail: { source: "form",     name: "salesDistributionTier", as: "label" },   // <option>.text
+    event_tier: { source: "form",     name: "annualRevenueRange" },                // raw value
+    tierDetail: { source: "form",     name: "annualRevenueRange", as: "label" },   // <option>.text
     zip_code:   { source: "form",     name: "zipCode", default: "" },
     event_card: { source: "response", path: "event_card", default: "no card submitted" },
     state:      { source: "response", path: "state", default: "" },
@@ -528,11 +535,11 @@ fullName, email, phone, businessName, zipCode, consent
 trackingId (_ga cookie), landingPage, referrer, clientBrowser
 utmSource, utmMedium, utmCampaign, utmContent, utmTerm, utmId
 gclid, fbclid, msclkid
-annualRevenueRange (mapped from internal salesDistributionTier form key)
+annualRevenueRange (form key matches API field 1:1)
 source, formType
 ```
 
-Internal-only data the library uses but does NOT ship: the NFID cookie value (used as `idempotencyKey` and for dataLayer events; toggleable to wire via `attributionPlugin({ includeNfid: true })`), and the form keys `firstName`/`lastName`/`salesDistributionTier` (combined or mapped before submission).
+Internal-only data the library uses but does NOT ship: the NFID cookie value (used as `idempotencyKey` and for dataLayer events; toggleable to wire via `attributionPlugin({ includeNfid: true })`), and the form keys `firstName` / `lastName` (combined into `fullName` before submission).
 
 ---
 
