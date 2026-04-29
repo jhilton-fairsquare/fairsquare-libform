@@ -136,18 +136,26 @@ describe("serverValidationPlugin", () => {
 });
 
 describe("tierMapPlugin", () => {
-  it("translates tier code → grouped tier + annualRevenueRange", () => {
-    const ctx = { onSubmit: null };
+  it("emits annualRevenueRange by default; salesDistributionTier is NOT shipped (not in API spec)", () => {
+    const ctx = { onSubmit: (v) => ({ ...v }) };
     tierMapPlugin().init(ctx);
     const out = ctx.onSubmit({ salesDistributionTier: "Tier 2a", other: "x" });
-    expect(out.salesDistributionTier).toBe("Tier 2");
     expect(out.annualRevenueRange).toBe("$250K-$499K");
+    expect(out.salesDistributionTier).toBe("Tier 2a"); // came through prev() unchanged; tierMap did not overwrite
     expect(out.other).toBe("x");
   });
 
-  it("emits raw tier when group: false", () => {
+  it("legacy parity: opt-in tierField restores grouped tier output", () => {
     const ctx = { onSubmit: null };
-    tierMapPlugin({ group: false }).init(ctx);
+    tierMapPlugin({ tierField: "salesDistributionTier" }).init(ctx);
+    const out = ctx.onSubmit({ salesDistributionTier: "Tier 2a" });
+    expect(out.salesDistributionTier).toBe("Tier 2");
+    expect(out.annualRevenueRange).toBe("$250K-$499K");
+  });
+
+  it("emits raw (ungrouped) tier when group: false and tierField is set", () => {
+    const ctx = { onSubmit: null };
+    tierMapPlugin({ tierField: "salesDistributionTier", group: false }).init(ctx);
     const out = ctx.onSubmit({ salesDistributionTier: "Tier 2a" });
     expect(out.salesDistributionTier).toBe("Tier 2a");
     expect(out.annualRevenueRange).toBe("$250K-$499K");
@@ -157,7 +165,6 @@ describe("tierMapPlugin", () => {
     const ctx = { onSubmit: null };
     tierMapPlugin().init(ctx);
     const out = ctx.onSubmit({ salesDistributionTier: "" });
-    expect(out.salesDistributionTier).toBeFalsy();
     expect(out.annualRevenueRange).toBeUndefined();
   });
 
@@ -213,12 +220,20 @@ describe("queryParamsPlugin", () => {
     expect(out.utmSource).toBeUndefined();
   });
 
-  it("captures gclsrc alongside gclid", () => {
+  it("does not capture gclsrc by default (not in API spec)", () => {
     setSearch("?gclid=abc&gclsrc=aw.ds");
     const ctx = { onSubmit: null };
     queryParamsPlugin().init(ctx);
     const out = ctx.onSubmit({});
     expect(out.gclid).toBe("abc");
+    expect(out.gclsrc).toBeUndefined();
+  });
+
+  it("gclsrc can be opted in via extraMap", () => {
+    setSearch("?gclid=abc&gclsrc=aw.ds");
+    const ctx = { onSubmit: null };
+    queryParamsPlugin({ extraMap: { gclsrc: "gclsrc" } }).init(ctx);
+    const out = ctx.onSubmit({});
     expect(out.gclsrc).toBe("aw.ds");
   });
 });
@@ -286,16 +301,31 @@ describe("attributionPlugin", () => {
     });
   };
 
-  it("emits NFID, landingPage, path, referrer, clientBrowser", () => {
+  it("emits spec-documented attribution fields by default (no nfid, no path)", () => {
     setSearch("?ref=email");
     const ctx = { onSubmit: null };
     attributionPlugin().init(ctx);
     const out = ctx.onSubmit({});
-    expect(out.nfid).toMatch(/^NFID-/);
     expect(out.landingPage).toContain("example.com/page");
-    expect(out.path).not.toContain("?");
     expect(out.clientBrowser).toBeTypeOf("string");
     expect("referrer" in out).toBe(true);
+    expect(out.nfid).toBeUndefined(); // legacy; opt-in via includeNfid: true
+    expect(out.path).toBeUndefined(); // legacy; opt-in via includePath: true
+  });
+
+  it("includeNfid + includePath restore the legacy fields when explicitly opted in", () => {
+    setSearch("?ref=email");
+    const ctx = { onSubmit: null };
+    attributionPlugin({ includeNfid: true, includePath: true }).init(ctx);
+    const out = ctx.onSubmit({});
+    expect(out.nfid).toMatch(/^NFID-/);
+    expect(out.path).not.toContain("?");
+  });
+
+  it("still sets ctx.clientId so downstream plugins can read NFID even without emitting it", () => {
+    const ctx = { onSubmit: null };
+    attributionPlugin().init(ctx);
+    expect(ctx.clientId).toMatch(/^NFID-/);
   });
 
   it("includeTrackingId reads _ga cookie when present", () => {
@@ -311,17 +341,16 @@ describe("attributionPlugin", () => {
     attributionPlugin({
       includeReferrer: false,
       includeLandingPage: false,
-      includePath: false,
       includeClientBrowser: false,
       includeTrackingId: false,
     }).init(ctx);
     const out = ctx.onSubmit({});
-    expect(Object.keys(out).filter((k) => k !== "nfid").length).toBe(0);
+    expect(Object.keys(out).length).toBe(0);
   });
 
-  it("renames keys via fields option", () => {
+  it("renames keys via fields option (when emission is opted in)", () => {
     const ctx = { onSubmit: null };
-    attributionPlugin({ fields: { nfid: "client_id" } }).init(ctx);
+    attributionPlugin({ includeNfid: true, fields: { nfid: "client_id" } }).init(ctx);
     const out = ctx.onSubmit({});
     expect(out.client_id).toBeDefined();
     expect(out.nfid).toBeUndefined();

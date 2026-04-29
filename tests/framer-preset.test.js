@@ -95,7 +95,7 @@ describe("framerForm: default form (full set of fields)", () => {
     expect(t.send).toHaveBeenCalledTimes(1);
     const payload = t.send.mock.calls[0][0];
 
-    // Form-data fields
+    // Spec-documented form-data fields
     expect(payload).toMatchObject({
       fullName: "Ada Lovelace",
       businessName: "Lovelace Analytics",
@@ -104,19 +104,22 @@ describe("framerForm: default form (full set of fields)", () => {
       zipCode: "10001",
       consent: true,
     });
-    // Routing statics
+    // Routing statics — `journey` is passed through because the test passed it;
+    // `responseChannel` is NOT in the default payload (not in API spec).
     expect(payload).toMatchObject({
       source: "NF",
       formType: "Framer",
       journey: "NFCoreApply",
-      responseChannel: "Internet",
     });
-    // Tier mapping
-    expect(payload.salesDistributionTier).toBe("Tier 2");
+    expect(payload.responseChannel).toBeUndefined();
+    // Tier mapping: only the spec-documented annualRevenueRange ships
     expect(payload.annualRevenueRange).toBe("$250K-$499K");
-    // Attribution
-    expect(payload.nfid).toMatch(/^NFID-/);
+    expect(payload.salesDistributionTier).toBeUndefined();
+    // Attribution: nfid is NOT shipped (not in API spec)
+    expect(payload.nfid).toBeUndefined();
+    expect(payload.path).toBeUndefined();
     expect(typeof payload.landingPage).toBe("string");
+    expect(typeof payload.clientBrowser).toBe("string");
   });
 
   it("rejects an invalid email and never calls transport", async () => {
@@ -356,8 +359,8 @@ describe("framerForm: name= attribute resolution (primary)", () => {
       phone: "2125550100",
       consent: true,
     });
-    expect(payload.salesDistributionTier).toBe("Tier 2");
     expect(payload.annualRevenueRange).toBe("$250K-$499K");
+    expect(payload.salesDistributionTier).toBeUndefined(); // not in API spec
   });
 
   it("name= on the input takes precedence over a class match elsewhere", async () => {
@@ -409,7 +412,7 @@ describe("framerForm: name= attribute resolution (primary)", () => {
     });
   });
 
-  it("FirstName/LastName variant works via name= attributes", async () => {
+  it("FirstName/LastName variant via name= combines into fullName (spec field) on the wire", async () => {
     buildForm(
       "n4",
       `
@@ -428,9 +431,85 @@ describe("framerForm: name= attribute resolution (primary)", () => {
     submit("n4");
     await tick();
     const payload = t.send.mock.calls[0][0];
-    expect(payload.firstName).toBe("Ada");
-    expect(payload.lastName).toBe("Lovelace");
-    expect(payload.fullName).toBeUndefined();
+    expect(payload.fullName).toBe("Ada Lovelace");
+    expect(payload.firstName).toBeUndefined();
+    expect(payload.lastName).toBeUndefined();
+  });
+});
+
+describe("framerForm: spec-conformance — wire payload contains only documented fields", () => {
+  it("default payload has no salesDistributionTier, no nfid, no path, no responseChannel, no firstName/lastName", async () => {
+    buildForm(
+      "spec",
+      `
+        <input name="firstName" value="Ada" />
+        <input name="lastName"  value="Lovelace" />
+        <input name="email"     value="ada@example.com" />
+        <input name="phone"     value="2125550100" />
+        <select name="salesDistributionTier"><option value="Tier 2b" selected>X</option></select>
+        <input type="checkbox" name="consent" checked />
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({
+      id: "spec",
+      formType: "Framer",
+      gaFormType: "x",
+      navigate: () => {},
+      // Note: NOT passing journey or responseChannel — they should not appear.
+    });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("spec");
+    await tick();
+    const payload = t.send.mock.calls[0][0];
+
+    // Spec-documented fields present
+    expect(payload.source).toBe("NF");
+    expect(payload.formType).toBe("Framer");
+    expect(payload.fullName).toBe("Ada Lovelace");
+    expect(payload.email).toBe("ada@example.com");
+    expect(payload.phone).toBe("2125550100");
+    expect(payload.consent).toBe(true);
+    expect(payload.annualRevenueRange).toBe("$500K-$999K");
+
+    // Out-of-spec fields absent
+    expect(payload.salesDistributionTier).toBeUndefined();
+    expect(payload.firstName).toBeUndefined();
+    expect(payload.lastName).toBeUndefined();
+    expect(payload.nfid).toBeUndefined();
+    expect(payload.path).toBeUndefined();
+    expect(payload.responseChannel).toBeUndefined();
+    expect(payload.journey).toBeUndefined();
+  });
+
+  it("journey and responseChannel are passed through ONLY when explicitly configured", async () => {
+    buildForm(
+      "spec2",
+      `
+        <input name="fullName" value="Ada Lovelace" />
+        <input name="email"    value="ada@example.com" />
+        <input name="phone"    value="2125550100" />
+        <select name="salesDistributionTier"><option value="Tier 2a" selected>X</option></select>
+        <input type="checkbox" name="consent" checked />
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({
+      id: "spec2",
+      formType: "Framer",
+      gaFormType: "x",
+      journey: "NFCoreApply",
+      responseChannel: "Internet",
+      navigate: () => {},
+    });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("spec2");
+    await tick();
+    const payload = t.send.mock.calls[0][0];
+    expect(payload.journey).toBe("NFCoreApply");
+    expect(payload.responseChannel).toBe("Internet");
   });
 });
 
@@ -574,7 +653,7 @@ describe("framerForm: mount-time wiring diagnostic", () => {
 });
 
 describe("framerForm: FirstName/LastName variant (no FullName wrapper)", () => {
-  it("auto-skips fullName and validates first+last instead", async () => {
+  it("auto-skips fullName and validates first+last; ships combined fullName on the wire", async () => {
     buildForm(
       "f6",
       `
@@ -595,8 +674,8 @@ describe("framerForm: FirstName/LastName variant (no FullName wrapper)", () => {
     await tick();
     expect(t.send).toHaveBeenCalledTimes(1);
     const payload = t.send.mock.calls[0][0];
-    expect(payload.firstName).toBe("Ada");
-    expect(payload.lastName).toBe("Lovelace");
-    expect(payload.fullName).toBeUndefined();
+    expect(payload.fullName).toBe("Ada Lovelace");
+    expect(payload.firstName).toBeUndefined();
+    expect(payload.lastName).toBeUndefined();
   });
 });

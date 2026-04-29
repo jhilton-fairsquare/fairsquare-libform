@@ -48,28 +48,28 @@ import { createForm, validators, plugins } from "@fairsquare/libform/dist/fairsq
 
 ## Quick start — Framer drop-in
 
-For Fairsquare's standard Framer landing pages, use the `framer` preset. It handles strict validators, all 9 plugins in the right order, the `_nfIdSF` cookie, the eTLD+1 cookie domain, and the endpoint switch by hostname. Fields resolve by HTML `name` attribute (Framer's right-panel "Name" property sets this natively — no Code Override required), with a legacy class-name fallback for parity with the older prod `script.js`.
+For Fairsquare's standard Framer landing pages, use the `framer` preset. It handles strict validators, all 9 plugins in the right order, the `_nfIdSF` cookie, the eTLD+1 cookie domain, and the endpoint switch by hostname. Fields resolve by HTML `name` attribute (Framer's right-panel "Name" property sets this natively — no Code Override required), with a legacy class-name fallback for hosts that pre-date the `name=` contract.
+
+**The wire payload contains only fields documented in the [NF Lead Gateway Integration Guide](../NF-Lead-Gateway-Vendor-Integration-Guide.md) Field Reference.** Internal-only keys (`firstName`/`lastName` are combined into `fullName` per the spec; `salesDistributionTier` is reduced to its spec-documented `annualRevenueRange`; `nfid`/`path` are no longer shipped) stay inside the library where validators and plugins use them.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.2.0/dist/fairsquare-form.iife.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.3.0/dist/fairsquare-form.iife.min.js"></script>
 <script>
   FairsquareForm.presets.framer({
     id: "framer-form-1",
     formType: "Framer",
-    journey: "NFCoreApply",
     gaFormType: "large_stand_alone_apply_now",
   });
 
   FairsquareForm.presets.framer({
     id: "framer-form-2",
     formType: "Framer",
-    journey: "NFCoreApply",
     gaFormType: "large_footer_form_apply_now",
   });
 </script>
 ```
 
-That's the full configuration for two prod-parity forms. The preset handles attribution, query-param capture, tier mapping, fbclid resync, dataLayer events, server-validation surfacing, and the redirect contract — all wired in the correct order.
+That's the full configuration for two forms. The preset handles attribution, query-param capture, tier mapping, fbclid resync, dataLayer events, server-validation surfacing, and the redirect contract — all wired in the correct order.
 
 ### Customizing the preset
 
@@ -96,26 +96,38 @@ FairsquareForm.presets.framer({
 });
 ```
 
-**Other preset options:** `endpoint`, `source`, `responseChannel`, `cookieName`, `cookieDomain`, `fieldClasses` (override the legacy class selector for a field), `dataLayerParams` (extend GA params), `onSubmit` (replace payload mapping), `onSuccess`, `onError`, `navigate` (replace `window.location.href` for SPA routing), `quiet` (suppress the mount-time wiring diagnostic).
+**Other preset options:** `endpoint`, `source`, `cookieName`, `cookieDomain`, `fieldClasses` (override the legacy class selector for a field), `dataLayerParams` (extend GA params), `onSubmit` (replace payload mapping), `onSuccess`, `onError`, `navigate` (replace `window.location.href` for SPA routing), `quiet` (suppress the mount-time wiring diagnostic).
+
+**Non-spec opt-in fields:** `journey` and `responseChannel` are NOT documented in the API spec and are not emitted by default. If your specific NF deployment requires them, pass them explicitly — they will be sent verbatim. The library's default behavior conforms to the published Field Reference; deviation from the spec is opt-in only.
 
 ### Default field set
 
-Each field is resolved by `[name="<key>"]` first, then by `.<LegacyClass>` if no `name=` match. The preset auto-detects which fields are present on the page and only validates the ones that exist:
+Each field is resolved by `[name="<key>"]` first, then by `.<LegacyClass>` if no `name=` match. The preset auto-detects which fields are present on the page and only validates the ones that exist. The "Wire field" column shows what (if anything) lands in the outgoing payload.
 
-| Field key (= `name=` value) | Legacy class | Default validator |
-|---|---|---|
-| `fullName` | `.FullName` | `required` + `fullNameLettersOnly` |
-| `firstName` / `lastName` | `.FirstName` / `.LastName` | `required` + `lettersHyphenSpaces` |
-| `businessName` | `.BusinessName` | `required` + `lettersHyphenSpaces` |
-| `email` | `.Email` | `required` + `emailStrict` |
-| `phone` | `.Phone` | `required` + `phoneUS` (live-formatted) |
-| `zipCode` | `.ZipCode` | `required` + `zipUS` (live-formatted) |
-| `salesDistributionTier` | `.SalesDistributionTier` | `requiredSelect` |
-| `consent` | `.PrivacyPolicyAccepted` | `mustAccept` |
+| Form key (`name=`) | Legacy class | Wire field | Default validator |
+|---|---|---|---|
+| `fullName` | `.FullName` | `fullName` | `required` + `fullNameLettersOnly` |
+| `firstName` / `lastName` | `.FirstName` / `.LastName` | combined into `fullName` | `required` + `lettersHyphenSpaces` |
+| `businessName` | `.BusinessName` | `businessName` | `required` + `lettersHyphenSpaces` |
+| `email` | `.Email` | `email` | `required` + `emailStrict` |
+| `phone` | `.Phone` | `phone` (digits only) | `required` + `phoneUS` (live-formatted) |
+| `zipCode` | `.ZipCode` | `zipCode` | `required` + `zipUS` (live-formatted) |
+| `salesDistributionTier` | `.SalesDistributionTier` | `annualRevenueRange` (mapped from tier code) | `requiredSelect` |
+| `consent` | `.PrivacyPolicyAccepted` | `consent` (boolean) | `mustAccept` |
 
-The preset uses `fullName` if present; otherwise it falls back to `firstName` + `lastName`.
+The preset uses `fullName` if present; otherwise it falls back to `firstName` + `lastName`, joining them with a space before shipping. The internal form keys `firstName`, `lastName`, and `salesDistributionTier` never appear in the wire payload.
 
-**Authoring in Framer (recommended):** select each input on the canvas → right panel → set the **Name** property to the field key from the table above (`fullName`, `email`, `phone`, `salesDistributionTier`, `consent`). No Code Override needed.
+**Annual sales `<select>` option values must be tier codes** — the form-side value goes through `tierMapPlugin` to derive `annualRevenueRange`. Use the dropdown's labels for human-readable text but the values must be the internal tier codes:
+
+| Label | Option value |
+|---|---|
+| Under $120K | `Tier 1a` |
+| $120K-$249K | `Tier 1b` |
+| $250K-$499K | `Tier 2a` |
+| $500K-$999K | `Tier 2b` |
+| Over $1M | `Tier 3` |
+
+**Authoring in Framer (recommended):** select each input on the canvas → right panel → set the **Name** property to the form key from the table above (`fullName`, `email`, `phone`, `salesDistributionTier`, `consent`). No Code Override needed.
 
 **Legacy class wiring (existing prod pages):** add the corresponding class via a Code Override — `withFullName`, `withEmail`, etc. — that appends the class to the element's `className`. Continues to work unchanged.
 
@@ -157,7 +169,7 @@ createForm({
   plugins: [
     plugins.attribution(),
     plugins.queryParams(),
-    plugins.staticFields({ source: "NF", formType: "your-formType", journey: "NFCoreApply", responseChannel: "Internet" }),
+    plugins.staticFields({ source: "NF", formType: "your-formType" }),
     plugins.submitButton(),
     plugins.serverValidation(),
     plugins.redirectOnUrl(),
@@ -277,16 +289,18 @@ Each plugin is a factory returning `{ init?, enrich?, onBeforeSend?, onAfterSend
 
 ### `attributionPlugin(options?)`
 
-Adds attribution fields to the payload via `init` (wraps `onSubmit`).
+Adds spec-documented attribution fields to the payload via `init` (wraps `onSubmit`).
 
-| Field | Source | Toggle |
-|---|---|---|
-| `nfid` | crypto-strong UUID, persisted in cookie (default `nfid`) | `includeNfid` |
-| `trackingId` | `_ga` cookie | `includeTrackingId` |
-| `landingPage` | `window.location.href` | `includeLandingPage` |
-| `path` | URL minus query/hash | `includePath` |
-| `referrer` | `document.referrer` | `includeReferrer` |
-| `clientBrowser` | `navigator.userAgent` | `includeClientBrowser` |
+| Field | Source | Toggle | Default |
+|---|---|---|---|
+| `trackingId` | `_ga` cookie | `includeTrackingId` | on |
+| `landingPage` | `window.location.href` | `includeLandingPage` | on |
+| `referrer` | `document.referrer` | `includeReferrer` | on |
+| `clientBrowser` | `navigator.userAgent` | `includeClientBrowser` | on |
+| `nfid` | crypto-strong UUID, persisted in cookie | `includeNfid` | **off** (not in API spec) |
+| `path` | URL minus query/hash | `includePath` | **off** (not in API spec) |
+
+The plugin still generates and persists the NFID cookie regardless of the `includeNfid` flag, and exposes it on `ctx.clientId` so downstream plugins (e.g., the dataLayerPlugin) can reference it. The flag only controls whether it lands in the wire payload.
 
 Options: `clientId` (forwarded to `getOrCreateClientId`: `cookieName`, `persistDays`, `sameSite`, `secure`, `domain`, `canSetCookie`); `gaCookieName` (default `_ga`); `fields` (rename payload keys).
 
@@ -294,32 +308,32 @@ Options: `clientId` (forwarded to `getOrCreateClientId`: `cookieName`, `persistD
 
 Captures URL query-string params, writes them to the payload using canonical NF field names.
 
-Default mapping: `utm_source→utmSource`, `utm_medium→utmMedium`, `utm_campaign→utmCampaign`, `utm_content→utmContent`, `utm_term→utmTerm`, `utm_id→utmId`, `gclid`, `gclsrc`, `fbclid`, `msclkid`.
+Default mapping (every entry corresponds to a documented Tracking and Attribution field): `utm_source→utmSource`, `utm_medium→utmMedium`, `utm_campaign→utmCampaign`, `utm_content→utmContent`, `utm_term→utmTerm`, `utm_id→utmId`, `gclid`, `fbclid`, `msclkid`.
+
+Note: `gclsrc` (Google click source) is **not** in the default map — it's not in the API spec. Opt-in via `extraMap: { gclsrc: "gclsrc" }`.
 
 Options: `map` (replace defaults), `extraMap` (extend), `useDefaults`, `namespace` (nest under a key, e.g. `attribution.utmSource`).
 
 ### `tierMapPlugin(options?)`
 
-Reads a tier code from the payload (default field `salesDistributionTier`) and writes:
-- `salesDistributionTier`: grouped tier (`Tier 2a/2b → Tier 2`)
-- `annualRevenueRange`: human-readable enum (e.g., `"$250K-$499K"`) per the table in `enums.TIER_TO_REVENUE_RANGE`
+Reads a tier code from the form (default field `salesDistributionTier`) and writes the spec-documented `annualRevenueRange` enum to the payload via `enums.TIER_TO_REVENUE_RANGE`.
 
-No client-side lookup objects required by consumers — the table is internal to the plugin.
+By default `salesDistributionTier` is **not** shipped on the wire (it's an internal form key, not a documented API field). To restore the legacy parity output, pass `tierField: "salesDistributionTier"`.
 
-Options: `sourceField`, `tierField` (output), `revenueRangeField` (output), `group` (default true).
+Options: `sourceField` (input form key), `tierField` (output key, default `null`), `revenueRangeField` (output key, default `"annualRevenueRange"`), `group` (default true; emits grouped `Tier 2` instead of `Tier 2a` when `tierField` is set).
 
 ### `staticFieldsPlugin(statics, options?)`
 
-Declarative per-form statics merged into the payload via `enrich`. The parity equivalent of prod's `{ static: "value" }` pattern.
+Declarative per-form statics merged into the payload via `enrich`.
 
 ```js
 plugins.staticFields({
-  source: "NF",
-  formType: "your-formType",     // case-sensitive, assigned at onboarding
-  journey: "NFCoreApply",        // change to "XPRSApply" for an XPRS form
-  responseChannel: "Internet",
+  source: "NF",                  // spec-required; always "NF"
+  formType: "your-formType",     // spec-required; case-sensitive, assigned at onboarding
 });
 ```
+
+`journey` and `responseChannel` are not in the published API spec. If your specific NF deployment requires them, you can pass them here — they'll be sent verbatim — but the documented field reference does not list them.
 
 Options: `mode` (`"override"` default, `"fill"` only sets keys not already present). Null/undefined entries are stripped so a missing config can't blank a real value.
 
@@ -475,16 +489,16 @@ The lib targets the National Funding Lead Gateway response shape. Two endpoints,
 - `POST /api/forms/submit` — whitelisted (origin allowlist + CORS), used by public landing pages. **No client_secret in the bundle.**
 - `POST /api/partners/submit` — OAuth Bearer, partner integrations. Out of scope for browser-deployed forms (would expose the secret).
 
-**Routing is server-side.** The migration appendix in the v1.0 implementation guide is explicit: "Remove any client-side routing logic (the gateway handles this)." The lib follows that — `formType` and `journey` are static config the developer sets; the gateway dispatches based on those values.
+**Routing is server-side.** The integration guide is explicit that the gateway dispatches based on `formType`. The lib follows that — `formType` is static config the developer sets at onboarding.
 
 | Field | Notes |
 |---|---|
-| `source` | Always `"NF"` |
-| `formType` | Assigned at partner onboarding, **case-sensitive**; determines the validation schema AND the workflow |
-| `journey` | Routing parameter (e.g., `"NFCoreApply"`, `"XPRSApply"`); used for conditional validation (`annualRevenueRange` is required for `NFCoreApply`) |
-| `responseChannel` | Enum: `"Internet"` or `"Internet-PURL"` |
+| `source` | Always `"NF"` (spec-required) |
+| `formType` | Assigned at partner onboarding, **case-sensitive**; determines validation schema and workflow (spec-required) |
+| `journey` | NOT in published API spec. Some deployments may consume it for routing — pass via `staticFieldsPlugin` only if your partner contact has confirmed in writing that it's required. |
+| `responseChannel` | NOT in published API spec. Same caveat as `journey`. |
 
-Configure all four via `staticFieldsPlugin`. To switch a form's journey, change one line.
+Configure spec-required statics (`source`, `formType`) via `staticFieldsPlugin`. The two non-spec fields are opt-in only.
 
 **Idempotency**: the API explicitly does not deduplicate (per the troubleshooting section of the integration guide). The transport supports an `idempotencyKey` getter — use the persisted NFID:
 
@@ -507,17 +521,18 @@ transport: mkTransport(endpoint, {
 - **`redirectOnUrlPlugin` rejects non-`http(s):` URLs**, including `javascript:` payloads in the `url` field.
 - **Validators run client-side for UX only.** Server-side validation is authoritative; `serverValidationPlugin` surfaces a 400 with `fields[]` back to the user.
 
-What gets sent on a typical submit (with the example plugins enabled):
+What gets sent on a typical submit (every field below is documented in the API Field Reference):
 
 ```
 fullName, email, phone, businessName, zipCode, consent
-nfid (cookie-backed), trackingId (_ga cookie)
-landingPage, path, referrer, clientBrowser (navigator.userAgent)
+trackingId (_ga cookie), landingPage, referrer, clientBrowser
 utmSource, utmMedium, utmCampaign, utmContent, utmTerm, utmId
-gclid, gclsrc, fbclid, msclkid
-salesDistributionTier (grouped), annualRevenueRange
-source, formType, journey, responseChannel
+gclid, fbclid, msclkid
+annualRevenueRange (mapped from internal salesDistributionTier form key)
+source, formType
 ```
+
+Internal-only data the library uses but does NOT ship: the NFID cookie value (used as `idempotencyKey` and for dataLayer events; toggleable to wire via `attributionPlugin({ includeNfid: true })`), and the form keys `firstName`/`lastName`/`salesDistributionTier` (combined or mapped before submission).
 
 ---
 
@@ -612,9 +627,9 @@ The build pipeline is intentionally not in the test suite — tests run against 
 
 ## Open questions / known gaps
 
-- **Is form 2 missing `journey` intentional?** Prod's standalone form sends `journey: "NFCoreApply"`; the footer form omits it. Either the gateway defaults it server-side or this is a config drift nobody noticed. Worth confirming.
-- **Tier codes (`Tier 1a`/`Tier 2b`/etc.) are not in the documented field reference.** The gateway accepts them today (unknown fields are ignored per the spec) but they're effectively dead weight. Could be removed once we confirm nothing downstream consumes them.
+- **Endpoint mismatch with the published spec.** The integration guide documents `POST /api/partners/submit` (Bearer-authenticated), but this lib targets `POST /api/forms/submit` (origin-allowlisted, no client_secret). Both work today; worth confirming with the NF team that `forms/submit` is a sanctioned public-page endpoint and not a deprecated alias.
+- **`journey` and `responseChannel` are not in the API spec.** Some deployments accept them; the lib treats them as opt-in non-spec fields. If your partner contact confirms either is required by your specific deployment, ask for the spec to be updated.
 - **No CI yet.** The recommended setup: GitHub Actions running `npm test` + `npm run build` + `git diff --exit-code dist/` on every PR.
-- **No README for plugin authors with TypeScript types.** JSDoc `@typedef`s for `FieldConfig | Validator | Plugin | Transport | Context` would give consuming codebases IDE support without a TS migration. Tracked as Phase 3 work.
+- **No JSDoc `@typedef`s for the public API surface.** Adding them would give consuming codebases IDE support without a TS migration.
 
-> **Note:** `"Framer"` is a real registered `formType`/journey, not a placeholder. Treat it as a first-class value alongside `NFCoreApply`, `XPRSApply`, etc.
+> **Note:** `"Framer"` is a real registered `formType` value, not a placeholder. Use it verbatim for Framer-deployed Fairsquare landing pages.

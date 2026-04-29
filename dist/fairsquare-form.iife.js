@@ -844,11 +844,11 @@ var FairsquareForm = (() => {
       clientId: clientIdOpts = {},
       gaCookieName = "_ga",
       fields = {},
-      includeNfid = true,
+      includeNfid = false,
       includeTrackingId = true,
       includeReferrer = true,
       includeLandingPage = true,
-      includePath = true,
+      includePath = false,
       includeClientBrowser = true
     } = options;
     const key = (k) => fields[k] || k;
@@ -913,7 +913,6 @@ var FairsquareForm = (() => {
     utm_term: "utmTerm",
     utm_id: "utmId",
     gclid: "gclid",
-    gclsrc: "gclsrc",
     fbclid: "fbclid",
     msclkid: "msclkid"
   });
@@ -943,7 +942,7 @@ var FairsquareForm = (() => {
   var tierMapPlugin = (options = {}) => {
     const {
       sourceField = "salesDistributionTier",
-      tierField = "salesDistributionTier",
+      tierField = null,
       revenueRangeField = "annualRevenueRange",
       group = true
     } = options;
@@ -1362,7 +1361,8 @@ var FairsquareForm = (() => {
     salesDistributionTier: { class: "SalesDistributionTier", validate: () => requiredSelect(), kind: "select", coreRule: "select" },
     consent: { class: "PrivacyPolicyAccepted", validate: () => mustAccept(), kind: "checkbox", coreRule: "accept" }
   };
-  var OMIT_WHEN_EMPTY = /* @__PURE__ */ new Set(["businessName", "zipCode", "firstName", "lastName"]);
+  var OMIT_WHEN_EMPTY = /* @__PURE__ */ new Set(["businessName", "zipCode"]);
+  var INTERNAL_FIELDS = /* @__PURE__ */ new Set(["firstName", "lastName", "salesDistributionTier"]);
   var findRoot = (id) => {
     if (typeof document === "undefined") return null;
     return document.querySelector(`[data-form="${id}"]`) || document.getElementById(id) || null;
@@ -1407,7 +1407,7 @@ var FairsquareForm = (() => {
       gaFormType,
       endpoint = defaultEndpoint(),
       source = "NF",
-      responseChannel = "Internet",
+      responseChannel,
       cookieName = "_nfIdSF",
       cookieDomain = deriveCookieDomain(),
       optional = [],
@@ -1447,13 +1447,14 @@ var FairsquareForm = (() => {
       const out = {
         consent: values.consent === "on" || values.consent === true
       };
-      if (values.fullName) out.fullName = values.fullName;
-      if (values.firstName) out.firstName = values.firstName;
-      if (values.lastName) out.lastName = values.lastName;
+      const combinedName = [values.firstName, values.lastName].map((s) => s == null ? "" : String(s).trim()).filter(Boolean).join(" ");
+      const fullName2 = values.fullName || combinedName;
+      if (fullName2) out.fullName = fullName2;
       if (values.email) out.email = values.email;
       if (values.phone) out.phone = stripDashes(values.phone);
       for (const k of Object.keys(values)) {
         if (k in out) continue;
+        if (INTERNAL_FIELDS.has(k)) continue;
         if (OMIT_WHEN_EMPTY.has(k) && !values[k]) continue;
         if (values[k] !== "" && values[k] != null) out[k] = values[k];
       }
