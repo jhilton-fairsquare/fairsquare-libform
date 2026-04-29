@@ -594,13 +594,15 @@ describe("framerForm: mount-time wiring diagnostic", () => {
     expect(msg).toContain('name="fullName"');
     expect(msg).toContain('name="email"');
     expect(msg).toContain('name="phone"');
-    expect(msg).toContain('name="annualRevenueRange"');
     expect(msg).toContain('name="consent"');
     expect(msg).toContain(".FullName");
     expect(msg).toContain(".Email");
     expect(msg).toContain(".Phone");
-    expect(msg).toContain(".SalesDistributionTier");
     expect(msg).toContain(".PrivacyPolicyAccepted");
+    // annualRevenueRange is workflow-required for some journeys and
+    // intentionally absent on others (XPRS) — it's not in the warning's
+    // hardcoded required-core list to avoid false positives.
+    expect(msg).not.toContain('name="annualRevenueRange"');
     warn.mockRestore();
   });
 
@@ -733,5 +735,177 @@ describe("framerForm: FirstName/LastName variant (no FullName wrapper)", () => {
     expect(payload.fullName).toBe("Ada Lovelace");
     expect(payload.firstName).toBeUndefined();
     expect(payload.lastName).toBeUndefined();
+  });
+});
+
+describe("framerForm: Business Information fields (XPRS-style)", () => {
+  it("XPRS layout — businessName + first/last + email + phone + businessZipCode + consent", async () => {
+    buildForm(
+      "xprs",
+      `
+        <input name="businessName"    value="Framer's Frames" />
+        <input name="firstName"       value="Jacob" />
+        <input name="lastName"        value="Smith" />
+        <input name="email"           value="jane@framer.com" />
+        <input name="phone"           value="415-555-0100" />
+        <input name="businessZipCode" value="00001" />
+        <input type="checkbox" name="consent" checked />
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({
+      id: "xprs",
+      formType: "Framer-XPRS",
+      gaFormType: "xprs_apply",
+      journey: "XPRSApply",
+      navigate: () => {},
+    });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("xprs");
+    await tick();
+
+    // 00001 is a 5-digit string but fails the zipUS lower-bound (501) check
+    // — verify the validator runs at the form layer (does NOT submit).
+    expect(t.send).not.toHaveBeenCalled();
+
+    // Use a valid ZIP and resubmit.
+    document.querySelector('[name="businessZipCode"]').value = "10001";
+    submit("xprs");
+    await tick();
+
+    expect(t.send).toHaveBeenCalledTimes(1);
+    const payload = t.send.mock.calls[0][0];
+    expect(payload).toMatchObject({
+      businessName: "Framer's Frames",
+      fullName: "Jacob Smith",          // first/last combined per spec
+      email: "jane@framer.com",
+      phone: "4155550100",              // dashes stripped
+      businessZipCode: "10001",
+      consent: true,
+      formType: "Framer-XPRS",
+      journey: "XPRSApply",
+    });
+    expect(payload.firstName).toBeUndefined();
+    expect(payload.lastName).toBeUndefined();
+  });
+
+  it("businessZipCode validator catches an invalid 5-digit ZIP", async () => {
+    buildForm(
+      "bz",
+      `
+        <input name="fullName" value="Ada Lovelace" />
+        <input name="email"    value="ada@example.com" />
+        <input name="phone"    value="2125550100" />
+        <input name="businessZipCode" value="abc12" />
+        <input type="checkbox" name="consent" checked />
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({ id: "bz", formType: "F", gaFormType: "x", navigate: () => {} });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("bz");
+    await tick();
+    expect(t.send).not.toHaveBeenCalled();
+  });
+
+  it("businessState validator: accepts valid 2-letter, rejects others", async () => {
+    buildForm(
+      "bs",
+      `
+        <input name="fullName" value="Ada Lovelace" />
+        <input name="email"    value="ada@example.com" />
+        <input name="phone"    value="2125550100" />
+        <input name="businessState" value="ZZ" />
+        <input type="checkbox" name="consent" checked />
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({ id: "bs", formType: "F", gaFormType: "x", navigate: () => {} });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("bs");
+    await tick();
+    expect(t.send).not.toHaveBeenCalled();
+
+    document.querySelector('[name="businessState"]').value = "ca";
+    submit("bs");
+    await tick();
+    expect(t.send).toHaveBeenCalledTimes(1);
+    expect(t.send.mock.calls[0][0].businessState).toBe("ca");
+  });
+
+  it("entityType + industry validate against the spec enum and ship in the payload", async () => {
+    buildForm(
+      "ei",
+      `
+        <input name="fullName" value="Ada Lovelace" />
+        <input name="email"    value="ada@example.com" />
+        <input name="phone"    value="2125550100" />
+        <select name="entityType"><option value="LLC" selected>LLC</option></select>
+        <select name="industry"><option value="Manufacturing" selected>Manufacturing</option></select>
+        <input type="checkbox" name="consent" checked />
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({ id: "ei", formType: "F", gaFormType: "x", navigate: () => {} });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("ei");
+    await tick();
+    expect(t.send).toHaveBeenCalledTimes(1);
+    expect(t.send.mock.calls[0][0]).toMatchObject({
+      entityType: "LLC",
+      industry: "Manufacturing",
+    });
+  });
+
+  it("entityType validator rejects a value outside the spec enum", async () => {
+    buildForm(
+      "et",
+      `
+        <input name="fullName" value="Ada Lovelace" />
+        <input name="email"    value="ada@example.com" />
+        <input name="phone"    value="2125550100" />
+        <select name="entityType"><option value="Cooperative" selected>Cooperative</option></select>
+        <input type="checkbox" name="consent" checked />
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({ id: "et", formType: "F", gaFormType: "x", navigate: () => {} });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("et");
+    await tick();
+    expect(t.send).not.toHaveBeenCalled();
+  });
+
+  it("forms without business fields are unaffected (auto-skip)", async () => {
+    buildForm(
+      "no-biz",
+      `
+        <input name="fullName" value="Ada Lovelace" />
+        <input name="email"    value="ada@example.com" />
+        <input name="phone"    value="2125550100" />
+        <select name="annualRevenueRange"><option value="$250K-$499K" selected>X</option></select>
+        <input type="checkbox" name="consent" checked />
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({ id: "no-biz", formType: "F", gaFormType: "x", navigate: () => {} });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("no-biz");
+    await tick();
+    expect(t.send).toHaveBeenCalledTimes(1);
+    const payload = t.send.mock.calls[0][0];
+    expect(payload.businessName).toBeUndefined();
+    expect(payload.businessStreetAddress).toBeUndefined();
+    expect(payload.businessCity).toBeUndefined();
+    expect(payload.businessState).toBeUndefined();
+    expect(payload.businessZipCode).toBeUndefined();
+    expect(payload.entityType).toBeUndefined();
+    expect(payload.industry).toBeUndefined();
   });
 });

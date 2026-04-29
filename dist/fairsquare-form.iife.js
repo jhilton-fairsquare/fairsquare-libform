@@ -494,6 +494,7 @@ var FairsquareForm = (() => {
     phoneUS: () => phoneUS,
     required: () => required,
     requiredSelect: () => requiredSelect,
+    usState: () => usState,
     zipUS: () => zipUS
   });
 
@@ -687,6 +688,63 @@ var FairsquareForm = (() => {
     if (value === true) return ok();
     const s = toStr(value).toLowerCase();
     return s === "true" || s === "on" || s === "1" || s === "yes" ? ok() : fail(msg);
+  };
+  var US_STATES = /* @__PURE__ */ new Set([
+    "AL",
+    "AK",
+    "AZ",
+    "AR",
+    "CA",
+    "CO",
+    "CT",
+    "DE",
+    "FL",
+    "GA",
+    "HI",
+    "ID",
+    "IL",
+    "IN",
+    "IA",
+    "KS",
+    "KY",
+    "LA",
+    "ME",
+    "MD",
+    "MA",
+    "MI",
+    "MN",
+    "MS",
+    "MO",
+    "MT",
+    "NE",
+    "NV",
+    "NH",
+    "NJ",
+    "NM",
+    "NY",
+    "NC",
+    "ND",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VT",
+    "VA",
+    "WA",
+    "WV",
+    "WI",
+    "WY",
+    "DC"
+  ]);
+  var usState = (msg = "Please enter a valid 2-letter state code (e.g., CA).") => async (value) => {
+    const s = toStr(value).trim().toUpperCase();
+    return US_STATES.has(s) ? ok() : fail(msg);
   };
   var __testing = { toStr };
 
@@ -1363,18 +1421,44 @@ var FairsquareForm = (() => {
 
   // lib/presets/framer.js
   var DEFAULT_FIELDS = {
+    // Required (per API spec: source, formType, fullName, email, phone, consent)
     fullName: { class: "FullName", validate: () => fullNameLettersOnly() },
     firstName: { class: "FirstName", validate: () => lettersHyphenSpaces("Please enter your first name.") },
     lastName: { class: "LastName", validate: () => lettersHyphenSpaces("Please enter your last name.") },
-    businessName: { class: "BusinessName", validate: () => lettersHyphenSpaces("Please enter your business name.") },
     email: { class: "Email", validate: () => emailStrict() },
     phone: { class: "Phone", validate: () => phoneUS(), format: formatPhoneUS },
+    consent: { class: "PrivacyPolicyAccepted", validate: () => mustAccept(), kind: "checkbox", coreRule: "accept" },
+    // Personal Information (spec lines 343-353)
     zipCode: { class: "ZipCode", validate: () => zipUS(), format: formatZipUS },
-    // `annualRevenueRange` matches the API field name 1:1. Form value must
-    // be one of the documented enum strings (e.g., "$500K-$999K"); the
-    // validator surfaces typos at the form layer rather than as a 400 from
-    // the gateway. `salesDistributionTier` is accepted as a legacy alt name
-    // for pages still wired with the previous form-field key.
+    // Business Information (spec lines 357-370). Each is auto-skipped if the
+    // form doesn't contain a matching input — adding them here makes them
+    // available to any preset consumer without changing existing form behavior.
+    // businessName: spec only constrains length (2-100 chars). The previous
+    // lettersHyphenSpaces validator was a script.js-era port that rejected
+    // legitimate business names like "Framer's Frames" (apostrophe), "AT&T"
+    // (ampersand), "3M" (digits). Match the spec instead.
+    businessName: { class: "BusinessName", validate: () => all(minLength(2, "Please enter your business name."), maxLength(100, "Business name must be 100 characters or fewer.")) },
+    businessStreetAddress: { class: "BusinessStreetAddress", validate: () => minLength(2, "Please enter a street address.") },
+    businessCity: { class: "BusinessCity", validate: () => minLength(2, "Please enter a city.") },
+    businessState: { class: "BusinessState", validate: () => usState() },
+    businessZipCode: { class: "BusinessZipCode", validate: () => zipUS(), format: formatZipUS },
+    entityType: {
+      class: "EntityType",
+      validate: () => all(requiredSelect(), oneOf(ENTITY_TYPES, "Please select a valid entity type.")),
+      kind: "select",
+      coreRule: "select"
+    },
+    industry: {
+      class: "Industry",
+      validate: () => all(requiredSelect(), oneOf(INDUSTRIES, "Please select a valid industry.")),
+      kind: "select",
+      coreRule: "select"
+    },
+    // Financial Information (spec lines 374-380). `annualRevenueRange` matches
+    // the API field name 1:1; option value is the API enum directly. Validator
+    // surfaces typos at the form layer rather than as a 400 from the gateway.
+    // `salesDistributionTier` is accepted as a legacy alt name for pages
+    // still wired with the previous form-field key.
     annualRevenueRange: {
       class: "SalesDistributionTier",
       altNames: ["salesDistributionTier"],
@@ -1384,8 +1468,7 @@ var FairsquareForm = (() => {
       ),
       kind: "select",
       coreRule: "select"
-    },
-    consent: { class: "PrivacyPolicyAccepted", validate: () => mustAccept(), kind: "checkbox", coreRule: "accept" }
+    }
   };
   var OMIT_WHEN_EMPTY = /* @__PURE__ */ new Set(["businessName", "zipCode"]);
   var INTERNAL_FIELDS = /* @__PURE__ */ new Set(["firstName", "lastName"]);
@@ -1546,7 +1629,7 @@ var FairsquareForm = (() => {
             `name \u2014 set ${hint("fullName")} on one input, OR ${hint("firstName")} + ${hint("lastName")} on two separate inputs`
           );
         }
-        for (const f of ["email", "phone", "annualRevenueRange", "consent"]) {
+        for (const f of ["email", "phone", "consent"]) {
           if (!has(f)) missing.push(`${f} \u2014 set ${hint(f)} on the corresponding input`);
         }
         if (missing.length === 0) return;

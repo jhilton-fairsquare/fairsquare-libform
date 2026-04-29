@@ -5,7 +5,7 @@ import {
   zipUS,
   lettersHyphenSpaces, fullName, fullNameLettersOnly,
   minLength, maxLength, pattern,
-  requiredSelect, mustAccept,
+  requiredSelect, mustAccept, usState,
   all, any,
   __testing,
 } from "../lib/form-core/validators/index.js";
@@ -131,6 +131,12 @@ describe("requiredSelect", () => {
   const v = requiredSelect();
   it("accepts non-empty", async () => expectValid(v, "Tier 1a"));
   it("rejects empty", async () => expectInvalid(v, ""));
+});
+
+describe("usState", () => {
+  const v = usState();
+  it.each(["CA", "ca", " ca ", "TX", "DC"])("accepts valid US state %j", async (val) => expectValid(v, val));
+  it.each(["", "C", "CAL", "ZZ", "California", "12"])("rejects %j", async (val) => expectInvalid(v, val));
 });
 
 describe("minLength / maxLength / pattern", () => {

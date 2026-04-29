@@ -53,8 +53,8 @@ For Fairsquare's standard Framer landing pages, use the `framer` preset. It hand
 **The wire payload contains only fields documented in the [NF Lead Gateway Integration Guide](../NF-Lead-Gateway-Vendor-Integration-Guide.md) Field Reference.** Form-field keys match the API field names 1:1 wherever possible (e.g., `annualRevenueRange` is both the form key and the wire field). The only internal-only keys are `firstName`/`lastName`, which are read for validators and combined into `fullName` before submission per the spec.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.3.1/dist/fairsquare-form.iife.min.js"></script>
-<!-- v0.3.1 rename: form-field key `salesDistributionTier` → `annualRevenueRange`. Legacy name= and class still resolve via back-compat. -->
+<script src="https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.3.2/dist/fairsquare-form.iife.min.js"></script>
+<!-- v0.3.2: Business Information fields added to DEFAULT_FIELDS — businessStreetAddress, businessCity, businessState, businessZipCode, entityType, industry. Auto-skip means existing forms are unaffected; XPRS-style forms can now wire these inputs by name=. -->
 <script>
   FairsquareForm.presets.framer({
     id: "framer-form-1",
@@ -105,16 +105,39 @@ FairsquareForm.presets.framer({
 
 Each field is resolved by `[name="<key>"]` first, then by `.<LegacyClass>` if no `name=` match. The preset auto-detects which fields are present on the page and only validates the ones that exist. The "Wire field" column shows what (if anything) lands in the outgoing payload.
 
+**Required (always emit / always validate when present):**
+
 | Form key (`name=`) | Legacy class | Wire field | Default validator |
 |---|---|---|---|
 | `fullName` | `.FullName` | `fullName` | `required` + `fullNameLettersOnly` |
 | `firstName` / `lastName` | `.FirstName` / `.LastName` | combined into `fullName` | `required` + `lettersHyphenSpaces` |
-| `businessName` | `.BusinessName` | `businessName` | `required` + `lettersHyphenSpaces` |
 | `email` | `.Email` | `email` | `required` + `emailStrict` |
 | `phone` | `.Phone` | `phone` (digits only) | `required` + `phoneUS` (live-formatted) |
-| `zipCode` | `.ZipCode` | `zipCode` | `required` + `zipUS` (live-formatted) |
-| `annualRevenueRange` (legacy `salesDistributionTier` accepted) | `.SalesDistributionTier` | `annualRevenueRange` | `requiredSelect` + `oneOf(ANNUAL_REVENUE_RANGES)` |
 | `consent` | `.PrivacyPolicyAccepted` | `consent` (boolean) | `mustAccept` |
+
+**Personal Information (auto-skip when input absent):**
+
+| Form key (`name=`) | Legacy class | Wire field | Default validator |
+|---|---|---|---|
+| `zipCode` | `.ZipCode` | `zipCode` | `required` + `zipUS` (live-formatted) |
+
+**Business Information (auto-skip when input absent — XPRS forms typically use these):**
+
+| Form key (`name=`) | Legacy class | Wire field | Default validator |
+|---|---|---|---|
+| `businessName` | `.BusinessName` | `businessName` | `required` + `minLength(2)` + `maxLength(100)` |
+| `businessStreetAddress` | `.BusinessStreetAddress` | `businessStreetAddress` | `required` |
+| `businessCity` | `.BusinessCity` | `businessCity` | `required` |
+| `businessState` | `.BusinessState` | `businessState` | `required` + `usState` |
+| `businessZipCode` | `.BusinessZipCode` | `businessZipCode` | `required` + `zipUS` (live-formatted) |
+| `entityType` | `.EntityType` | `entityType` | `requiredSelect` + `oneOf(ENTITY_TYPES)` |
+| `industry` | `.Industry` | `industry` | `requiredSelect` + `oneOf(INDUSTRIES)` |
+
+**Financial Information (auto-skip when input absent — NFCoreApply forms typically use this):**
+
+| Form key (`name=`) | Legacy class | Wire field | Default validator |
+|---|---|---|---|
+| `annualRevenueRange` (legacy `salesDistributionTier` accepted) | `.SalesDistributionTier` | `annualRevenueRange` | `requiredSelect` + `oneOf(ANNUAL_REVENUE_RANGES)` |
 
 The preset uses `fullName` if present; otherwise it falls back to `firstName` + `lastName`, joining them with a space before shipping. `firstName` and `lastName` never appear in the wire payload.
 
