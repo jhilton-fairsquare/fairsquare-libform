@@ -322,6 +322,122 @@ describe("framerForm: two presets on the same page", () => {
   });
 });
 
+describe("framerForm: mount-time wiring diagnostic", () => {
+  it("warns when required field classes are missing from the form root", async () => {
+    // Form root resolves but contains none of the expected field classes —
+    // exactly the failure mode of an unconfigured Framer canvas.
+    document.body.innerHTML = `
+      <form id="f-warn">
+        <input class="some-framer-class" />
+        <button type="submit">Apply</button>
+      </form>
+    `;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const handle = framerForm({
+      id: "f-warn",
+      formType: "Framer",
+      gaFormType: "x",
+      navigate: () => {},
+    });
+    await handle.ready;
+    await tick(); // let the .then() chained on ready run
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    const msg = warn.mock.calls[0][0];
+    expect(msg).toContain('form "f-warn"');
+    expect(msg).toContain(".FullName");
+    expect(msg).toContain(".Email");
+    expect(msg).toContain(".Phone");
+    expect(msg).toContain(".SalesDistributionTier");
+    expect(msg).toContain(".PrivacyPolicyAccepted");
+    warn.mockRestore();
+  });
+
+  it("does not warn when all required classes are present", async () => {
+    buildForm(
+      "f-ok",
+      `
+        <div class="FullName"><input value="Ada Lovelace" /></div>
+        <div class="Email"><input value="ada@example.com" /></div>
+        <div class="Phone"><input value="2125550100" /></div>
+        <div class="SalesDistributionTier"><select><option value="Tier 2a" selected>X</option></select></div>
+        <label class="PrivacyPolicyAccepted"><input type="checkbox" checked /> Accept</label>
+      `
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const handle = framerForm({ id: "f-ok", formType: "Framer", gaFormType: "x", navigate: () => {} });
+    await handle.ready;
+    await tick();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("accepts FirstName + LastName as the name pair", async () => {
+    buildForm(
+      "f-fl",
+      `
+        <div class="FirstName"><input value="Ada" /></div>
+        <div class="LastName"><input value="Lovelace" /></div>
+        <div class="Email"><input value="ada@example.com" /></div>
+        <div class="Phone"><input value="2125550100" /></div>
+        <div class="SalesDistributionTier"><select><option value="Tier 2a" selected>X</option></select></div>
+        <label class="PrivacyPolicyAccepted"><input type="checkbox" checked /> Accept</label>
+      `
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const handle = framerForm({ id: "f-fl", formType: "Framer", gaFormType: "x", navigate: () => {} });
+    await handle.ready;
+    await tick();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("quiet: true suppresses the warning even when classes are missing", async () => {
+    document.body.innerHTML = `
+      <form id="f-quiet"><button type="submit">Go</button></form>
+    `;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const handle = framerForm({
+      id: "f-quiet",
+      formType: "Framer",
+      gaFormType: "x",
+      navigate: () => {},
+      quiet: true,
+    });
+    await handle.ready;
+    await tick();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("respects fieldClasses overrides — warns about the overridden class name", async () => {
+    document.body.innerHTML = `
+      <form id="f-override">
+        <div class="FullName"><input /></div>
+        <div class="Phone"><input /></div>
+        <div class="SalesDistributionTier"><select><option value="Tier 1a" selected>x</option></select></div>
+        <label class="PrivacyPolicyAccepted"><input type="checkbox" /></label>
+        <button type="submit">Go</button>
+      </form>
+    `;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const handle = framerForm({
+      id: "f-override",
+      formType: "Framer",
+      gaFormType: "x",
+      navigate: () => {},
+      fieldClasses: { email: "MyEmailClass" },
+    });
+    await handle.ready;
+    await tick();
+    expect(warn).toHaveBeenCalledTimes(1);
+    const msg = warn.mock.calls[0][0];
+    expect(msg).toContain(".MyEmailClass");
+    expect(msg).not.toContain(".Email ");
+    warn.mockRestore();
+  });
+});
+
 describe("framerForm: FirstName/LastName variant (no FullName wrapper)", () => {
   it("auto-skips fullName and validates first+last instead", async () => {
     buildForm(

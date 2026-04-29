@@ -1417,7 +1417,8 @@ var FairsquareForm = (() => {
       onSubmit: onSubmitOverride,
       onSuccess,
       onError,
-      navigate: navigate2
+      navigate: navigate2,
+      quiet = false
     } = config;
     if (!id) throw new Error("framerForm: `id` is required");
     if (!formType) throw new Error("framerForm: `formType` is required");
@@ -1465,7 +1466,7 @@ var FairsquareForm = (() => {
       event_card: { source: "response", path: "event_card", default: "no card submitted" },
       state: { source: "response", path: "state", default: "" }
     };
-    return createForm({
+    const handle = createForm({
       id,
       endpoint,
       watchReplacement: true,
@@ -1499,6 +1500,34 @@ var FairsquareForm = (() => {
       onSuccess,
       onError
     });
+    if (!quiet && typeof console !== "undefined" && typeof console.warn === "function") {
+      handle.ready.then(() => {
+        const root = findRoot(id);
+        if (!root) return;
+        const cls = (n) => fieldClasses[n] || DEFAULT_FIELDS[n].class;
+        const has = (n) => isPresent(root, cls(n));
+        const missing = [];
+        if (!has("fullName") && !(has("firstName") && has("lastName"))) {
+          missing.push(
+            `name \u2014 add class ".${cls("fullName")}" to a single full-name input, OR ".${cls("firstName")}" + ".${cls("lastName")}" to two separate inputs`
+          );
+        }
+        for (const f of ["email", "phone", "salesDistributionTier", "consent"]) {
+          if (!has(f)) missing.push(`${f} \u2014 add class ".${cls(f)}" to the corresponding input`);
+        }
+        if (missing.length === 0) return;
+        console.warn(
+          `[libform/framer] form "${id}" is missing required field class${missing.length === 1 ? "" : "es"}.
+Validation will silently pass for unwired fields and the submission may go out empty.
+
+` + missing.map((m) => `  \u2022 ${m}`).join("\n") + `
+
+Fix: in Framer, select each input and add the listed class via Properties \u2192 Attributes \u2192 Class. Pass { quiet: true } to suppress this check.`
+        );
+      }).catch(() => {
+      });
+    }
+    return handle;
   }
 
   // lib/index.js
