@@ -4,8 +4,9 @@ A small, extensible form-handling library for Fairsquare lead-capture pages. Val
 
 Drop-in via `<script src>` for Framer/Webflow, or import as ESM in a build pipeline.
 
-- Zero runtime dependencies, ~23 KB minified IIFE bundle
-- 196 tests covering validators, transport, plugin pipeline, controller integration, build artifacts
+- Zero runtime dependencies, ~28 KB minified IIFE bundle
+- 246 tests covering validators, transport, plugin pipeline, controller integration, framer preset
+- **Spec-conformant by default** — the wire payload contains only fields documented in the [NF Lead Gateway Integration Guide](../NF-Lead-Gateway-Vendor-Integration-Guide.md). Out-of-spec script.js artifacts (`salesDistributionTier`, `nfid`, `path`, `firstName`/`lastName` as separate fields) are no longer shipped on the wire.
 - Plugin lifecycle: `init → enrich → onBeforeSend → transport → onAfterSend → onSuccess|onError`
 - Structured response handling for the Lead Gateway shape (`{ success, url, fields[], missingFields[] }`)
 - AbortController timeouts, optional `Idempotency-Key`, `credentials: 'omit'` by default
@@ -17,10 +18,10 @@ Drop-in via `<script src>` for Framer/Webflow, or import as ESM in a build pipel
 ### Framer / Webflow / plain HTML (IIFE drop-in)
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.1.0/dist/fairsquare-form.iife.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.3.2/dist/fairsquare-form.iife.min.js"></script>
 <script>
-  const { createForm, validators, formatters, plugins } = FairsquareForm;
-  // …configure as below
+  const { createForm, validators, formatters, plugins, presets } = FairsquareForm;
+  // …configure as below; for Fairsquare landing pages, use presets.framer
 </script>
 ```
 
@@ -29,7 +30,7 @@ Pin to a tag in production. To roll out a change: edit source, `npm run build`, 
 ### npm / build pipeline (ESM)
 
 ```bash
-npm install github:jhilton-fairsquare/fairsquare-libform#v0.1.0
+npm install github:jhilton-fairsquare/fairsquare-libform#v0.3.2
 ```
 
 ```js
@@ -70,7 +71,61 @@ For Fairsquare's standard Framer landing pages, use the `framer` preset. It hand
 </script>
 ```
 
-That's the full configuration for two forms. The preset handles attribution, query-param capture, tier mapping, fbclid resync, dataLayer events, server-validation surfacing, and the redirect contract — all wired in the correct order.
+That's the full configuration for two forms. The preset handles attribution, query-param capture, fbclid resync, dataLayer events, server-validation surfacing, and the redirect contract — all wired in the correct order.
+
+### On the Framer canvas — what to set
+
+Each form input needs a `name=` attribute matching the form key the library expects. In Framer, set this via the right panel → **Name** property (no Code Override needed). The form root needs an **Identifier** matching the `id` you passed to `presets.framer({ id: ..., })`.
+
+The preset auto-skips fields that aren't on the form, so you only wire the inputs your specific journey actually uses. Two common layouts:
+
+#### NFCoreApply layout (revenue dropdown)
+
+| Input | `name=` |
+|---|---|
+| Full name (single input) | `fullName` |
+| —or— First name + Last name | `firstName` + `lastName` |
+| Email | `email` |
+| Phone | `phone` |
+| Annual sales `<select>` | `annualRevenueRange` |
+| Consent checkbox | `consent` |
+
+#### XPRSApply layout (business cluster, no revenue dropdown)
+
+| Input | `name=` |
+|---|---|
+| Business name | `businessName` |
+| First name | `firstName` |
+| Last name | `lastName` |
+| Email | `email` |
+| Phone | `phone` |
+| Business ZIP | `businessZipCode` |
+| Consent checkbox | `consent` |
+
+#### Common additions (any journey)
+
+| Input | `name=` |
+|---|---|
+| Personal ZIP | `zipCode` |
+| Business street address | `businessStreetAddress` |
+| Business city | `businessCity` |
+| Business state (2-letter) | `businessState` |
+| Entity type `<select>` | `entityType` |
+| Industry `<select>` | `industry` |
+
+#### Dropdown option values
+
+For `<select>` inputs, the `<option value="…">` must match the API enum exactly — labels are free-form, but the value is what gets shipped:
+
+- `annualRevenueRange`: `Under $120K`, `$120K-$249K`, `$250K-$499K`, `$500K-$999K`, `Over $1M`
+- `entityType`: `Sole Proprietorship`, `Partnership`, `S Corp`, `C Corp`, `LLC`
+- `industry`: see [`enums.INDUSTRIES`](./lib/form-core/enums.js) (21 values)
+
+The validators reject any other value at the form layer, so a typo fails fast in dev rather than as a 400 from the gateway.
+
+#### Back-compat for existing prod pages
+
+Pages already wired with the legacy class hooks (`.FullName`, `.Email`, `.Phone`, `.SalesDistributionTier`, `.PrivacyPolicyAccepted`, …) continue to work — the resolver tries `name=` first and falls back to class. No change needed for the existing NFCore prod pages. Pages with the older `name="salesDistributionTier"` (pre-v0.3.1) also resolve correctly via the alt-name list.
 
 ### Customizing the preset
 
@@ -570,7 +625,7 @@ Internal-only data the library uses but does NOT ship: the NFID cookie value (us
 
 ```bash
 npm install
-npm test           # 196 tests in vitest + jsdom
+npm test           # 246 tests in vitest + jsdom
 npm run build      # emits dist/ (4 bundles)
 npm run build:watch
 ```
@@ -587,8 +642,10 @@ npm run build:watch
 **Deploy via jsDelivr GH:** tag a release, then point Framer/Webflow at:
 
 ```
-https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.1.0/dist/fairsquare-form.iife.min.js
+https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.3.2/dist/fairsquare-form.iife.min.js
 ```
+
+If a deployed page is loading an older tag and a fresh build hasn't propagated yet, you can force jsDelivr to refresh once with `https://purge.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@<tag>/dist/fairsquare-form.iife.min.js` (one-time hit, then cache resumes).
 
 `dist/` is tracked in git so the file is immediately available at any commit/tag — no separate publish pipeline. After every source change, regenerate (`npm run build`) and commit `dist/` alongside the source. A CI check that runs `npm run build && git diff --exit-code dist/` will catch drift.
 
@@ -597,6 +654,33 @@ https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.1.0/dist/fa
 ## Browser support
 
 ES2020 target. Concretely: any browser released after 2020 (Chromium-based, modern Firefox, modern Safari). Framer and Webflow consumer runtimes are well within that window. Drop the build target to `es2017` if you ever need to support older browsers — esbuild will handle the downlevel.
+
+---
+
+## Changelog
+
+### v0.3.2 (current)
+- Added Business Information fields to the framer preset's `DEFAULT_FIELDS`: `businessStreetAddress`, `businessCity`, `businessState`, `businessZipCode`, `entityType`, `industry`. Each auto-skips when its input isn't on the form, so existing NFCoreApply pages are unaffected.
+- New `usState()` validator (case-insensitive 2-letter US state code, 50 states + DC).
+- Loosened `businessName` validator to spec — now `minLength(2) + maxLength(100)` instead of letters-only. Accepts "Framer's Frames", "AT&T", "3M".
+- Mount diagnostic tightened: stopped warning about `annualRevenueRange` since XPRSApply forms legitimately omit it. Required-core is now email + phone + consent + name pair.
+
+### v0.3.1
+- Renamed form-field key `salesDistributionTier` → `annualRevenueRange` so it matches the API field 1:1. Form value now goes straight to the wire; option values must be the documented enum (`"$500K-$999K"` etc.). Validator: `requiredSelect + oneOf(ANNUAL_REVENUE_RANGES)`.
+- `tierMapPlugin` removed from the framer preset's default plugin chain. Kept as an opt-in migration helper for pages whose dropdowns still use legacy "Tier 2b"-style option values.
+- `DEFAULT_FIELDS` entries support an `altNames: [...]` list for back-compat name= matching. The new `annualRevenueRange` field accepts `name="salesDistributionTier"` as an alt for pages already wired with the previous key.
+- `oneOf` re-exported from the validators namespace (`V.oneOf`).
+
+### v0.3.0
+- Wire-payload audit against the published API spec. Out-of-spec fields no longer emitted by default: `salesDistributionTier`, `nfid`, `path`, `firstName`/`lastName` as separate fields (combined into `fullName` per spec), `gclsrc`, `responseChannel` (no default). Each has an opt-in escape hatch.
+- `tierMapPlugin` accepts the API enum string directly as the form value (in addition to legacy Tier codes).
+
+### v0.2.0
+- Field resolution: `[name="<key>"]` primary, `.<LegacyClass>` fallback. Framer's right-panel **Name** property now sets a working integration with no Code Override required.
+- Mount-time `console.warn` lists missing required fields with both the `name=` and the legacy class to add. Suppress with `{ quiet: true }`.
+
+### v0.1.x
+- Initial extraction from `script.js`. Plugin pipeline, validator catalog, transport with idempotency + timeouts, GA dataLayer with reliable delivery, fbclid/_fbp resync, FormController with name=-based field discovery, mount + watchReplacement.
 
 ---
 
@@ -612,7 +696,7 @@ The prod IIFE (`script.js`) and this lib do the same things; the lib does them i
 | `validateInputs` regexes | `validators` catalog (subdomain bug fixed) |
 | Phone/ZIP live formatting | `formatters` |
 | `setButtonLoading` | `submitButtonPlugin` |
-| `tierToRevenue` table + tier grouping | `enums.TIER_TO_REVENUE_RANGE` + `tierMapPlugin` |
+| `tierToRevenue` table + tier grouping | `enums.TIER_TO_REVENUE_RANGE` + `tierMapPlugin` (v0.3.1+: opt-in migration helper only — recommended authoring puts the API enum string directly in the option value) |
 | `dataLayer.push({event: "gaEvent", …})` | `dataLayerPlugin` (with reliable delivery + no lookup tables) |
 | `fieldMap` with `{ static: … }` | `staticFieldsPlugin` |
 | `optionalFields` query-param capture | `queryParamsPlugin` |
@@ -622,7 +706,9 @@ The prod IIFE (`script.js`) and this lib do the same things; the lib does them i
 
 Differences worth knowing:
 
-- **Email validator** now accepts multi-label domains (`user@mail.fairsquare.com`). Prod's regex rejected them — that was a real, latent bug.
+- **Spec-conformant wire payload (v0.3.0+)**. Out-of-spec fields prod's script.js shipped — `salesDistributionTier`, `nfid`, `path`, separate `firstName`/`lastName`, `gclsrc` — are no longer emitted. The form-field key for the revenue dropdown is `annualRevenueRange`, matching the API field 1:1; the option value is shipped verbatim. NFID is still generated and persisted as a cookie (used for idempotency and dataLayer events) but stays inside the library. Each removed field has an opt-in flag if a deployment really needs it.
+- **`businessName` validator loosened (v0.3.2)**. Prod's `lettersHyphenSpaces` regex rejected legitimate names like "Framer's Frames", "AT&T", "3M". Now `minLength(2) + maxLength(100)` matching the spec.
+- **Email validator** accepts multi-label domains (`user@mail.fairsquare.com`). Prod's regex rejected them — a real latent bug.
 - **`tierDetail`** in the GA event reads `<option>.text` directly instead of looking up the prod `tierToRevenue` table. Same value, no mapping table on the client.
 - **Submission errors fire a `gaEventError`** in the dataLayer so you can measure failure rates — prod fires the success event regardless of outcome.
 - **Failed submits don't redirect** by default (validation 400 keeps the user on the form). Prod's flow had no failure path UI; this is an improvement.
@@ -632,7 +718,7 @@ Differences worth knowing:
 ## Testing
 
 ```bash
-npm test           # all 196 tests
+npm test           # all 246 tests
 npm test -- tests/transport.test.js
 npm run test:coverage
 ```
@@ -641,12 +727,13 @@ Tests cover:
 
 | File | Tests | What |
 |---|---|---|
-| `validators.test.js` | 79 | Every validator, valid + invalid + composition |
+| `validators.test.js` | 81 | Every validator, valid + invalid + composition |
 | `transport.test.js` | 12 | Every Lead Gateway response shape, timeout, idempotency |
-| `plugins.test.js` | 32 | redirectOnUrl branches, serverValidation, tierMap, queryParams, attribution, staticFields |
+| `plugins.test.js` | 40 | tierMap (legacy + direct enum paths), queryParams, attribution (spec defaults + opt-ins), staticFields, redirectOnUrl, serverValidation |
+| `framer-preset.test.js` | 30 | name=/class resolution, business-information cluster, mount diagnostic, FirstName/LastName combine |
 | `dataLayer.test.js` | 22 | Source resolution, fireOn modes, every reliability strategy, dataLayer→redirect ordering |
 | `fbclidResync.test.js` | 11 | Enrich shape, immediate/retry/timeout, custom config, controller integration |
-| `controller.test.js` | 7 | Mount, submit happy path, error path, setFieldErrors |
+| `controller.test.js` | 8 | Mount, submit happy path, error path, setFieldErrors |
 | `mount.test.js` | 6 | waitForElement immediate/late/timeout, mount + watchReplacement |
 | `formatters.test.js` | 9 | formatPhoneUS, formatZipUS, stripDashes |
 | `enums.test.js` | 18 | All enums frozen, tier table verbatim, oneOf |
