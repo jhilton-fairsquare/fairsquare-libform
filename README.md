@@ -48,10 +48,10 @@ import { createForm, validators, plugins } from "@fairsquare/libform/dist/fairsq
 
 ## Quick start — Framer drop-in
 
-For Fairsquare's standard Framer landing pages, use the `framer` preset. It knows the prod conventions: class-based field selectors (`.FullName`, `.Email`, `.Phone`, …), strict validators, all 9 plugins in the right order, the `_nfIdSF` cookie, the eTLD+1 cookie domain, and the endpoint switch by hostname.
+For Fairsquare's standard Framer landing pages, use the `framer` preset. It handles strict validators, all 9 plugins in the right order, the `_nfIdSF` cookie, the eTLD+1 cookie domain, and the endpoint switch by hostname. Fields resolve by HTML `name` attribute (Framer's right-panel "Name" property sets this natively — no Code Override required), with a legacy class-name fallback for parity with the older prod `script.js`.
 
 ```html
-<script src="https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.1.0/dist/fairsquare-form.iife.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/jhilton-fairsquare/fairsquare-libform@v0.2.0/dist/fairsquare-form.iife.min.js"></script>
 <script>
   FairsquareForm.presets.framer({
     id: "framer-form-1",
@@ -96,24 +96,30 @@ FairsquareForm.presets.framer({
 });
 ```
 
-**Other preset options:** `endpoint`, `source`, `responseChannel`, `cookieName`, `cookieDomain`, `fieldClasses` (override class selectors), `dataLayerParams` (extend GA params), `onSubmit` (replace payload mapping), `onSuccess`, `onError`, `navigate` (replace `window.location.href` for SPA routing).
+**Other preset options:** `endpoint`, `source`, `responseChannel`, `cookieName`, `cookieDomain`, `fieldClasses` (override the legacy class selector for a field), `dataLayerParams` (extend GA params), `onSubmit` (replace payload mapping), `onSuccess`, `onError`, `navigate` (replace `window.location.href` for SPA routing), `quiet` (suppress the mount-time wiring diagnostic).
 
 ### Default field set
 
-The preset auto-detects which of these are present on the page (checks for the class wrapper) and only validates the ones that exist:
+Each field is resolved by `[name="<key>"]` first, then by `.<LegacyClass>` if no `name=` match. The preset auto-detects which fields are present on the page and only validates the ones that exist:
 
-| Class wrapper | Field name | Default validator |
+| Field key (= `name=` value) | Legacy class | Default validator |
 |---|---|---|
-| `.FullName` | `fullName` | `required` + `fullNameLettersOnly` |
-| `.FirstName` / `.LastName` | `firstName` / `lastName` | `required` + `lettersHyphenSpaces` |
-| `.BusinessName` | `businessName` | `required` + `lettersHyphenSpaces` |
-| `.Email` | `email` | `required` + `emailStrict` |
-| `.Phone` | `phone` | `required` + `phoneUS` (live-formatted) |
-| `.ZipCode` | `zipCode` | `required` + `zipUS` (live-formatted) |
-| `.SalesDistributionTier` | `salesDistributionTier` | `requiredSelect` |
-| `.PrivacyPolicyAccepted` | `consent` | `mustAccept` |
+| `fullName` | `.FullName` | `required` + `fullNameLettersOnly` |
+| `firstName` / `lastName` | `.FirstName` / `.LastName` | `required` + `lettersHyphenSpaces` |
+| `businessName` | `.BusinessName` | `required` + `lettersHyphenSpaces` |
+| `email` | `.Email` | `required` + `emailStrict` |
+| `phone` | `.Phone` | `required` + `phoneUS` (live-formatted) |
+| `zipCode` | `.ZipCode` | `required` + `zipUS` (live-formatted) |
+| `salesDistributionTier` | `.SalesDistributionTier` | `requiredSelect` |
+| `consent` | `.PrivacyPolicyAccepted` | `mustAccept` |
 
-The preset uses the `FullName` wrapper if present; otherwise it falls back to `FirstName` + `LastName` (matching prod's behavior).
+The preset uses `fullName` if present; otherwise it falls back to `firstName` + `lastName`.
+
+**Authoring in Framer (recommended):** select each input on the canvas → right panel → set the **Name** property to the field key from the table above (`fullName`, `email`, `phone`, `salesDistributionTier`, `consent`). No Code Override needed.
+
+**Legacy class wiring (existing prod pages):** add the corresponding class via a Code Override — `withFullName`, `withEmail`, etc. — that appends the class to the element's `className`. Continues to work unchanged.
+
+**Diagnostic:** if the form mounts and a required field is reachable by neither `name=` nor its legacy class, the preset logs a single `console.warn` listing what's missing and how to wire it. Suppress with `{ quiet: true }`.
 
 ### When to skip the preset
 

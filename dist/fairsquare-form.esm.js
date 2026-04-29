@@ -1336,17 +1336,17 @@ var DEFAULT_FIELDS = {
   consent: { class: "PrivacyPolicyAccepted", validate: () => mustAccept(), kind: "checkbox", coreRule: "accept" }
 };
 var OMIT_WHEN_EMPTY = /* @__PURE__ */ new Set(["businessName", "zipCode", "firstName", "lastName"]);
-var isPresent = (root, klass) => {
-  if (!root) return false;
-  return root.querySelector(`.${klass}`) != null;
-};
 var findRoot = (id) => {
   if (typeof document === "undefined") return null;
   return document.querySelector(`[data-form="${id}"]`) || document.getElementById(id) || null;
 };
-var readByClass = (root, klass) => {
-  if (!root) return "";
-  const wrap = root.querySelector(`.${klass}`);
+var resolveField = (root, name, klass) => {
+  if (!root) return null;
+  return root.querySelector(`[name="${name}"]`) || root.querySelector(`.${klass}`) || null;
+};
+var fieldPresent = (root, name, klass) => resolveField(root, name, klass) != null;
+var readField = (root, name, klass) => {
+  const wrap = resolveField(root, name, klass);
   if (!wrap) return "";
   if (wrap.matches("input, select, textarea")) {
     if (wrap.type === "checkbox") return wrap.checked ? "on" : "";
@@ -1400,7 +1400,7 @@ function framerForm(config) {
   const fields = {};
   for (const [name, def] of Object.entries(DEFAULT_FIELDS)) {
     const klass = fieldClasses[name] || def.class;
-    const get = () => readByClass(findRoot(id), klass);
+    const get = () => readField(findRoot(id), name, klass);
     let validate;
     if (validatorOverrides[name]) {
       validate = validatorOverrides[name];
@@ -1410,7 +1410,7 @@ function framerForm(config) {
       validate = wantRequired ? all(required(), core) : optionalize(core);
     }
     const wrappedValidate = async (value, values) => {
-      if (!isPresent(findRoot(id), klass)) return { valid: true, message: "" };
+      if (!fieldPresent(findRoot(id), name, klass)) return { valid: true, message: "" };
       return validate(value, values);
     };
     fields[name] = { get, validate: wrappedValidate };
@@ -1478,24 +1478,25 @@ function framerForm(config) {
       const root = findRoot(id);
       if (!root) return;
       const cls = (n) => fieldClasses[n] || DEFAULT_FIELDS[n].class;
-      const has = (n) => isPresent(root, cls(n));
+      const has = (n) => fieldPresent(root, n, cls(n));
+      const hint = (n) => `name="${n}" (or legacy class ".${cls(n)}")`;
       const missing = [];
       if (!has("fullName") && !(has("firstName") && has("lastName"))) {
         missing.push(
-          `name \u2014 add class ".${cls("fullName")}" to a single full-name input, OR ".${cls("firstName")}" + ".${cls("lastName")}" to two separate inputs`
+          `name \u2014 set ${hint("fullName")} on one input, OR ${hint("firstName")} + ${hint("lastName")} on two separate inputs`
         );
       }
       for (const f of ["email", "phone", "salesDistributionTier", "consent"]) {
-        if (!has(f)) missing.push(`${f} \u2014 add class ".${cls(f)}" to the corresponding input`);
+        if (!has(f)) missing.push(`${f} \u2014 set ${hint(f)} on the corresponding input`);
       }
       if (missing.length === 0) return;
       console.warn(
-        `[libform/framer] form "${id}" is missing required field class${missing.length === 1 ? "" : "es"}.
+        `[libform/framer] form "${id}" is missing required field${missing.length === 1 ? "" : "s"}.
 Validation will silently pass for unwired fields and the submission may go out empty.
 
 ` + missing.map((m) => `  \u2022 ${m}`).join("\n") + `
 
-Fix: in Framer, select each input and add the listed class via Properties \u2192 Attributes \u2192 Class. Pass { quiet: true } to suppress this check.`
+Fix: in Framer's right panel, set each input's "Name" property to the value above. Pass { quiet: true } to suppress this check.`
       );
     }).catch(() => {
     });

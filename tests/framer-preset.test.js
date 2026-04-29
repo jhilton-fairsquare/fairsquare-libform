@@ -322,10 +322,120 @@ describe("framerForm: two presets on the same page", () => {
   });
 });
 
+describe("framerForm: name= attribute resolution (primary)", () => {
+  it("resolves every field by name= when no classes are present", async () => {
+    buildForm(
+      "n1",
+      `
+        <input name="fullName" value="Ada Lovelace" />
+        <input name="email"    value="ada@example.com" />
+        <input name="phone"    value="2125550100" />
+        <select name="salesDistributionTier">
+          <option value="Tier 2a" selected>$250K-$499K</option>
+        </select>
+        <input type="checkbox" name="consent" checked />
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({
+      id: "n1",
+      formType: "Framer",
+      gaFormType: "x",
+      navigate: () => {},
+    });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("n1");
+    await tick();
+
+    expect(t.send).toHaveBeenCalledTimes(1);
+    const payload = t.send.mock.calls[0][0];
+    expect(payload).toMatchObject({
+      fullName: "Ada Lovelace",
+      email: "ada@example.com",
+      phone: "2125550100",
+      consent: true,
+    });
+    expect(payload.salesDistributionTier).toBe("Tier 2");
+    expect(payload.annualRevenueRange).toBe("$250K-$499K");
+  });
+
+  it("name= on the input takes precedence over a class match elsewhere", async () => {
+    // Two inputs share the form root: one wired by name=, one carrying the
+    // legacy class. The name= match should win.
+    buildForm(
+      "n2",
+      `
+        <input name="email" value="ada@example.com" />
+        <div class="Email"><input value="legacy@example.com" /></div>
+        <input name="fullName" value="Ada Lovelace" />
+        <input name="phone" value="2125550100" />
+        <select name="salesDistributionTier"><option value="Tier 2a" selected>X</option></select>
+        <input type="checkbox" name="consent" checked />
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({ id: "n2", formType: "Framer", gaFormType: "x", navigate: () => {} });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("n2");
+    await tick();
+    expect(t.send.mock.calls[0][0].email).toBe("ada@example.com");
+  });
+
+  it("mixes name= and class within the same form", async () => {
+    buildForm(
+      "n3",
+      `
+        <input name="fullName" value="Ada Lovelace" />
+        <div class="Email"><input value="ada@example.com" /></div>
+        <input name="phone" value="2125550100" />
+        <div class="SalesDistributionTier"><select><option value="Tier 1a" selected>U</option></select></div>
+        <label class="PrivacyPolicyAccepted"><input type="checkbox" checked /></label>
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({ id: "n3", formType: "Framer", gaFormType: "x", navigate: () => {} });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("n3");
+    await tick();
+    const payload = t.send.mock.calls[0][0];
+    expect(payload).toMatchObject({
+      fullName: "Ada Lovelace",
+      email: "ada@example.com",
+      phone: "2125550100",
+      consent: true,
+    });
+  });
+
+  it("FirstName/LastName variant works via name= attributes", async () => {
+    buildForm(
+      "n4",
+      `
+        <input name="firstName" value="Ada" />
+        <input name="lastName"  value="Lovelace" />
+        <input name="email"     value="ada@example.com" />
+        <input name="phone"     value="2125550100" />
+        <select name="salesDistributionTier"><option value="Tier 2a" selected>X</option></select>
+        <input type="checkbox" name="consent" checked />
+      `
+    );
+    const t = fakeTransport();
+    const handle = framerForm({ id: "n4", formType: "Framer", gaFormType: "x", navigate: () => {} });
+    const ctrl = await handle.ready;
+    ctrl.transport = t;
+    submit("n4");
+    await tick();
+    const payload = t.send.mock.calls[0][0];
+    expect(payload.firstName).toBe("Ada");
+    expect(payload.lastName).toBe("Lovelace");
+    expect(payload.fullName).toBeUndefined();
+  });
+});
+
 describe("framerForm: mount-time wiring diagnostic", () => {
-  it("warns when required field classes are missing from the form root", async () => {
-    // Form root resolves but contains none of the expected field classes —
-    // exactly the failure mode of an unconfigured Framer canvas.
+  it("warns when required fields are reachable by neither name= nor class", async () => {
     document.body.innerHTML = `
       <form id="f-warn">
         <input class="some-framer-class" />
@@ -345,11 +455,36 @@ describe("framerForm: mount-time wiring diagnostic", () => {
     expect(warn).toHaveBeenCalledTimes(1);
     const msg = warn.mock.calls[0][0];
     expect(msg).toContain('form "f-warn"');
+    // Each missing field is hinted with both the name= and the legacy class.
+    expect(msg).toContain('name="fullName"');
+    expect(msg).toContain('name="email"');
+    expect(msg).toContain('name="phone"');
+    expect(msg).toContain('name="salesDistributionTier"');
+    expect(msg).toContain('name="consent"');
     expect(msg).toContain(".FullName");
     expect(msg).toContain(".Email");
     expect(msg).toContain(".Phone");
     expect(msg).toContain(".SalesDistributionTier");
     expect(msg).toContain(".PrivacyPolicyAccepted");
+    warn.mockRestore();
+  });
+
+  it("does not warn when all required fields resolve by name= alone", async () => {
+    buildForm(
+      "f-name-only",
+      `
+        <input name="fullName" />
+        <input name="email" />
+        <input name="phone" />
+        <select name="salesDistributionTier"><option value="Tier 1a">x</option></select>
+        <input type="checkbox" name="consent" />
+      `
+    );
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const handle = framerForm({ id: "f-name-only", formType: "Framer", gaFormType: "x", navigate: () => {} });
+    await handle.ready;
+    await tick();
+    expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
 
